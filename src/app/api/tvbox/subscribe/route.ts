@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getAvailableApiSites, getConfig } from '@/lib/config';
 import { getCachedLiveChannels } from '@/lib/live';
 
@@ -36,15 +35,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 获取用户信息
-    const authInfo = getAuthInfoFromCookie(request);
-    const username = authInfo?.username;
-
     // 获取配置
     const config = await getConfig();
 
-    // 获取视频源
-    const apiSites = await getAvailableApiSites(username);
+    // 获取视频源（TVBox客户端不会发送Cookie，直接获取所有启用的源）
+    const apiSites = await getAvailableApiSites();
 
     // 获取直播源
     const liveConfig = config.LiveConfig?.filter(live => !live.disabled) || [];
@@ -159,6 +154,18 @@ export async function GET(request: NextRequest) {
       // 广告配置
       ads: [],
     };
+
+    // 获取屏蔽源列表并过滤
+    const blockedSources = process.env.TVBOX_BLOCKED_SOURCES
+      ? process.env.TVBOX_BLOCKED_SOURCES.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    if (blockedSources.length > 0) {
+      tvboxSubscription.sites = tvboxSubscription.sites.filter(
+        site => !blockedSources.includes(site.key)
+      );
+      console.log('TVBOX 订阅已屏蔽源:', blockedSources);
+    }
 
     return NextResponse.json(tvboxSubscription, {
       headers: {

@@ -11,6 +11,31 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
 	{
+    version: '210.2.0',
+    date: '2026-01-29',
+	added: [
+		"外部播放器增加app打开",
+		"新增tvbox屏蔽源配置",
+		"新增视频源权重功能"
+    ],
+    changed: [
+		"设备管理当前设备置顶且显示黄色边框",
+		"live分片代理移除content-length发送"
+    ],
+    fixed: [
+		"修复tmdbkey错误和未登录时获取外部观影室密钥无限重定向"
+	]
+	},{
+    version: '210.1.3',
+    date: '2026-01-28',
+	added: [
+    ],
+    changed: [
+    ],
+    fixed: [
+		"修复跳转登录不登出"
+	]
+	},{
     version: '210.1.2',
     date: '2026-01-27',
 	added: [

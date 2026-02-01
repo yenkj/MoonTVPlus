@@ -33,6 +33,19 @@ export async function GET(request: NextRequest) {
   const config = await getConfig();
   const apiSites = await getAvailableApiSites(authInfo.username);
 
+  // 创建权重映射表
+  const weightMap = new Map<string, number>();
+  config.SourceConfig.forEach(source => {
+    weightMap.set(source.key, source.weight ?? 0);
+  });
+
+  // 按权重降序排序 apiSites
+  const sortedApiSites = [...apiSites].sort((a, b) => {
+    const weightA = weightMap.get(a.key) ?? 0;
+    const weightB = weightMap.get(b.key) ?? 0;
+    return weightB - weightA;
+  });
+
   // 检查是否配置了 OpenList
   const hasOpenList = !!(
     config.OpenListConfig?.Enabled &&
@@ -89,7 +102,7 @@ export async function GET(request: NextRequest) {
       const startEvent = `data: ${JSON.stringify({
         type: 'start',
         query,
-        totalSources: apiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount,
+        totalSources: sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount,
         timestamp: Date.now()
       })}\n\n`;
 
@@ -294,7 +307,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 为每个源创建搜索 Promise
-      const searchPromises = apiSites.map(async (site) => {
+      const searchPromises = sortedApiSites.map(async (site) => {
         try {
           // 添加超时控制
           const searchPromise = Promise.race([
@@ -363,7 +376,7 @@ export async function GET(request: NextRequest) {
         }
 
         // 检查是否所有源都已完成
-        if (completedSources === apiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount) {
+        if (completedSources === sortedApiSites.length + (hasOpenList ? 1 : 0) + embySourcesCount) {
           if (!streamClosed) {
             // 发送最终完成事件
             const completeEvent = `data: ${JSON.stringify({

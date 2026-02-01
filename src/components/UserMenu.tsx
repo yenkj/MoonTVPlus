@@ -2788,12 +2788,23 @@ export const UserMenu: React.FC = () => {
               </div>
             ) : (
               <div className='space-y-3'>
-                {devices.map((device) => {
+                {devices
+                  .sort((a, b) => {
+                    // 当前设备置顶
+                    if (a.isCurrent && !b.isCurrent) return -1;
+                    if (!a.isCurrent && b.isCurrent) return 1;
+                    return 0;
+                  })
+                  .map((device) => {
                   const DeviceIcon = getDeviceIcon(device.deviceInfo);
                   return (
                     <div
                       key={device.tokenId}
-                      className='p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'
+                      className={`p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border ${
+                        device.isCurrent
+                          ? 'border-yellow-400 dark:border-yellow-500'
+                          : 'border-gray-200 dark:border-gray-700'
+                      }`}
                     >
                       <div className='flex items-start justify-between'>
                         <div className='flex-1'>

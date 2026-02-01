@@ -147,6 +147,11 @@ async function verifyTurnstileToken(token: string, secretKey: string): Promise<b
 function getDeviceInfo(request: NextRequest): string {
   const userAgent = request.headers.get('user-agent') || 'Unknown';
 
+  // 检查是否为 MoonTVPlus APP
+  if (userAgent.toLowerCase().includes('moontvplus')) {
+    return 'MoonTVPlus APP';
+  }
+
   // 简单解析 User-Agent
   let browser = 'Unknown Browser';
   let os = 'Unknown OS';

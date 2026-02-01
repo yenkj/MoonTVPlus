@@ -42,10 +42,6 @@ export async function GET(request: Request) {
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
     headers.set('Accept-Ranges', 'bytes');
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      headers.set('Content-Length', contentLength);
-    }
 
     // 使用流式传输，避免占用内存
     const stream = new ReadableStream({

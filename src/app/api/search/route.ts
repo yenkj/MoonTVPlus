@@ -36,6 +36,12 @@ export async function GET(request: NextRequest) {
   const config = await getConfig();
   const apiSites = await getAvailableApiSites(authInfo.username);
 
+  // 创建权重映射表
+  const weightMap = new Map<string, number>();
+  config.SourceConfig.forEach(source => {
+    weightMap.set(source.key, source.weight ?? 0);
+  });
+
   // 检查是否配置了 OpenList
   const hasOpenList = !!(
     config.OpenListConfig?.Enabled &&
@@ -191,6 +197,14 @@ export async function GET(request: NextRequest) {
         return !yellowWords.some((word: string) => typeName.includes(word));
       });
     }
+
+    // 按权重降序排序
+    flattenedResults.sort((a, b) => {
+      const weightA = weightMap.get(a.source) ?? 0;
+      const weightB = weightMap.get(b.source) ?? 0;
+      return weightB - weightA;
+    });
+
     const cacheTime = await getCacheTime();
 
     if (flattenedResults.length === 0) {
