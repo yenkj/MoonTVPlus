@@ -85,12 +85,13 @@ async function searchWithCache(
           const title_url_array = url.split('#');
           title_url_array.forEach((title_url: string) => {
             const episode_title_url = title_url.split('$');
-            if (
-              episode_title_url.length === 2 &&
-              episode_title_url[1].endsWith('.m3u8')
-            ) {
-              matchTitles.push(episode_title_url[0]);
-              matchEpisodes.push(episode_title_url[1]);
+            if (episode_title_url.length === 2) {
+              const url = episode_title_url[1];
+              // 支持 m3u8, mkv, mp4, avi, flv 等格式
+              if (url.match(/\.(m3u8|mkv|mp4|avi|flv|webm|mov)(\?.*)?$/i)) {
+                matchTitles.push(episode_title_url[0]);
+                matchEpisodes.push(url);
+                }
             }
           });
           if (matchEpisodes.length > episodes.length) {
@@ -251,12 +252,13 @@ export async function getDetailFromApi(
       const title_url_array = url.split('#');
       title_url_array.forEach((title_url: string) => {
         const episode_title_url = title_url.split('$');
-        if (
-          episode_title_url.length === 2 &&
-          episode_title_url[1].endsWith('.m3u8')
-        ) {
-          matchTitles.push(episode_title_url[0]);
-          matchEpisodes.push(episode_title_url[1]);
+            if (episode_title_url.length === 2) {
+              const url = episode_title_url[1];
+              // 支持 m3u8, mkv, mp4, avi, flv 等格式
+              if (url.match(/\.(m3u8|mkv|mp4|avi|flv|webm|mov)(\?.*)?$/i)) {
+                matchTitles.push(episode_title_url[0]);
+                matchEpisodes.push(url);
+                }
         }
       });
       if (matchEpisodes.length > episodes.length) {
