@@ -495,7 +495,8 @@ export class EmbyClient {
       if (this.transcodeMp4) {
         url = `${this.serverUrl}/Videos/${itemId}/stream.mp4?api_key=${token}`;
       } else {
-        url = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
+        const playSessionId = generatePlaySessionId();  
+        url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
       }
 
       // 选项2: 拼接MediaSourceId参数
