@@ -247,6 +247,19 @@ function LoginPageClient() {
           localStorage.removeItem('rememberedCredentials');
         }
 
+        // 记录登录时间统计
+        try {
+          const loginTime = Date.now();
+          await fetch('/api/user/my-stats', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ loginTime })
+          });
+          localStorage.setItem('lastRecordedLogin', loginTime.toString());
+        } catch (statsError) {
+          console.warn('记录登录统计失败:', statsError);
+        }
+
         const redirect = searchParams.get('redirect') || '/';
         router.replace(redirect);
       } else {
