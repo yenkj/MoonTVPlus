@@ -3338,12 +3338,14 @@ function PlayPageClient() {
         ...currentSubtitles.map((sub: any) => ({
           html: sub.label,
           url: sub.url,
+          default: preferredSubtitle && sub.url === preferredSubtitle.url,
         })),
       ];
 
       artPlayerRef.current.setting.add({
         name: 'subtitle-selector',
         html: '字幕',
+        tooltip: preferredSubtitle ? preferredSubtitle.label : '关闭',
         selector: subtitleOptions,
         onSelect: function (item: any) {
           if (artPlayerRef.current) {
@@ -4849,25 +4851,6 @@ function PlayPageClient() {
         // 获取当前集的字幕
         const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
-
-        // 优先选择中文字幕
-        const getPreferredSubtitle = (subtitles: any[]): any => {
-          if (!subtitles || subtitles.length === 0) return null;
-          const chineseKeywords = [
-            '简体中文', '中简', '简体', '中文', 
-            'chinese simplified', 'chinese_simplified', 'chinese-simplified',
-            'chinese', 'chi', 'zh', 'zh-cn', 'zh_cn'
-          ];
-          for (const keyword of chineseKeywords) {
-            const found = subtitles.find(sub => {
-              const label = (sub.label || '').toLowerCase();
-              const language = (sub.language || '').toLowerCase();
-              return label.includes(keyword.toLowerCase()) || language.includes(keyword.toLowerCase());
-            });
-            if (found) return found;
-          }
-          return subtitles[0];
-        };
         const preferredSubtitle = getPreferredSubtitle(currentSubtitles);
 
         artPlayerRef.current = new Artplayer({
@@ -5855,6 +5838,7 @@ function PlayPageClient() {
         // 添加字幕切换功能
         const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
         if (currentSubtitles.length > 0 && artPlayerRef.current) {
+          const preferredSub = getPreferredSubtitle(currentSubtitles);
           const subtitleOptions = [
             {
               html: '关闭',
@@ -5863,11 +5847,14 @@ function PlayPageClient() {
             ...currentSubtitles.map((sub: any) => ({
               html: sub.label,
               url: sub.url,
+              default: preferredSub && sub.url === preferredSub.url,
             })),
           ];
 
           artPlayerRef.current.setting.add({
+            name: 'subtitle-selector',
             html: '字幕',
+            tooltip: preferredSub ? preferredSub.label : '关闭',
             selector: subtitleOptions,
             onSelect: function (item: any) {
               if (artPlayerRef.current) {
