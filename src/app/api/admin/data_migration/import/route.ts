@@ -285,6 +285,10 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+      // 导入登录统计数据
+      if (user.loginStats) {
+        await db.setUserLoginStats(username, user.loginStats);
+      }
     }
 
     console.log(`成功导入 ${importedCount} 个用户的user:info`);
