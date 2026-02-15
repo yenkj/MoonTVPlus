@@ -11,6 +11,7 @@ import { DanmakuCacheCleanup } from '../components/DanmakuCacheCleanup';
 import { DownloadBubble } from '../components/DownloadBubble';
 import { DownloadPanel } from '../components/DownloadPanel';
 import { GlobalErrorIndicator } from '../components/GlobalErrorIndicator';
+import { SessionTracker } from '../components/SessionTracker';
 import { SiteProvider } from '../components/SiteProvider';
 import { ThemeProvider } from '../components/ThemeProvider';
 import { TokenRefreshManager } from '../components/TokenRefreshManager';
@@ -228,6 +229,7 @@ export default async function RootLayout({
         >
           <TopProgressBar />
           <TokenRefreshManager />
+          <SessionTracker />
           <SiteProvider siteName={siteName} announcement={announcement} tmdbApiKey={tmdbApiKey}>
             <WatchRoomProvider>
               <DownloadProvider>
