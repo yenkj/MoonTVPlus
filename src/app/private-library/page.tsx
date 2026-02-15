@@ -77,8 +77,8 @@ export default function PrivateLibraryPage() {
   const [selectedView, setSelectedView] = useState<string>('all');
   const [loadingViews, setLoadingViews] = useState(false);
   // Emby排序状态
-  const [sortBy, setSortBy] = useState<string>('SortName');
-  const [sortOrder, setSortOrder] = useState<'Ascending' | 'Descending'>('Ascending');
+  const [sortBy, setSortBy] = useState<string>('PremiereDate');
+  const [sortOrder, setSortOrder] = useState<'Ascending' | 'Descending'>('Descending');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [sortDropdownPosition, setSortDropdownPosition] = useState<{ x: number; y: number; width: number }>({ x: 0, y: 0, width: 0 });
   const sortButtonRef = useRef<HTMLDivElement | null>(null);
@@ -328,7 +328,7 @@ export default function PrivateLibraryPage() {
   };
 
   const isDefaultSort = () => {
-    return sortBy === 'SortName' && sortOrder === 'Ascending';
+    return sortBy === 'PremiereDate' && sortOrder === 'Descending';
   };
 
   const calculateSortDropdownPosition = () => {
