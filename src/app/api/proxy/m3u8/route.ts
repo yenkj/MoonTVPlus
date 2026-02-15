@@ -29,14 +29,9 @@ export async function GET(request: Request) {
   try {
     const decodedUrl = decodeURIComponent(url);
 
-    response = await fetch(decodedUrl, {
-      cache: 'no-cache',
-      redirect: 'follow',
-      credentials: 'same-origin',
-      headers: {
-        'User-Agent': ua,
-      },
-    });
+    const result = await fetchWithCookies(decodedUrl, ua);  // 手动处理重定向，传递 cookie
+    response = result.response;
+    const finalUrl = result.finalUrl;
 
     if (!response.ok) {
       return NextResponse.json({ error: 'Failed to fetch m3u8' }, { status: 500 });
