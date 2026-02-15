@@ -119,7 +119,9 @@ export async function POST(req: NextRequest) {
         // 音乐歌单（包含歌曲）
         musicPlaylists: playlistsWithSongs,
         // V2用户的加密密码
-        passwordV2: finalPasswordV2
+        passwordV2: finalPasswordV2,
+        // 登录统计数据
+        loginStats: await db.getUserLoginStats(username)
       };
 
       exportData.data.userData[username] = userData;
