@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     // 解析表单数据
     const formData = await req.formData();
-    const file = formData.get('file') as Blob;
+    const file = formData.get('file') as File;
     const password = formData.get('password') as string;
 
     if (!file) {
