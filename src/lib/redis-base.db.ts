@@ -1898,4 +1898,38 @@ export abstract class BaseRedisStorage implements IStorage {
       throw error;
     }
   }
+
+  async getUserLoginStats(userName: string): Promise<{
+    loginCount: number;
+    firstLoginTime: number | null;
+    lastLoginTime: number | null;
+    lastLoginDate: number | null;
+  } | null> {
+    try {
+      const loginStatsKey = `user_login_stats:${userName}`;
+      const storedStats = await this.withRetry(() => this.adapter.get(loginStatsKey));
+      if (!storedStats) {
+        return null;
+      }
+      return JSON.parse(storedStats);
+    } catch (error) {
+      console.error(`获取用户 ${userName} 登入统计失败:`, error);
+      return null;
+    }
+  }
+
+  async setUserLoginStats(userName: string, stats: {
+    loginCount: number;
+    firstLoginTime: number | null;
+    lastLoginTime: number | null;
+    lastLoginDate: number | null;
+  }): Promise<void> {
+    try {
+      const loginStatsKey = `user_login_stats:${userName}`;
+      await this.withRetry(() => this.adapter.set(loginStatsKey, JSON.stringify(stats)));
+    } catch (error) {
+      console.error(`设置用户 ${userName} 登入统计失败:`, error);
+      throw error;
+    }
+  }
 }
