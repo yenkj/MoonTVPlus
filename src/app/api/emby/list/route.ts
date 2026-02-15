@@ -13,12 +13,12 @@ export async function GET(request: NextRequest) {
   const pageSize = parseInt(searchParams.get('pageSize') || '20');
   const parentId = searchParams.get('parentId') || undefined;
   const embyKey = searchParams.get('embyKey') || undefined;
-  const sortBy = searchParams.get('sortBy') || 'SortName';
-  const sortOrder = searchParams.get('sortOrder') || 'Ascending';
+  const sortBy = searchParams.get('sortBy') || 'PremiereDate';
+  const sortOrder = searchParams.get('sortOrder') || 'Descending';
 
   try {
     // 判断是否是默认排序（只有默认排序才使用缓存）
-    const isDefaultSort = sortBy === 'SortName' && sortOrder === 'Ascending';
+    const isDefaultSort = sortBy === 'PremiereDate' && sortOrder === 'Descending';
 
     // 只有默认排序才检查缓存
     if (isDefaultSort) {
