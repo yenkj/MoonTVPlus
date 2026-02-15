@@ -160,6 +160,13 @@ export interface IStorage {
   setUserEmail?(userName: string, email: string): Promise<void>;
   getEmailNotificationPreference?(userName: string): Promise<boolean>;
   setEmailNotificationPreference?(userName: string, enabled: boolean): Promise<void>;
+
+  // 播放统计相关
+  getPlayStats?(): Promise<PlayStatsResult>;
+  getUserPlayStat?(userName: string): Promise<UserPlayStat>;
+  getContentStats?(limit?: number): Promise<ContentStat[]>;
+  updatePlayStatistics?(userName: string, source: string, id: string, watchTime: number): Promise<void>;
+  updateUserLoginStats?(userName: string, loginTime: number, isFirstLogin?: boolean): Promise<void>;
 }
 
 // 搜索结果数据结构
@@ -283,4 +290,75 @@ export interface MovieRequest {
   fulfilledAt?: number;
   fulfilledSource?: string;
   fulfilledId?: string;
+}
+
+// 用户播放统计数据结构
+export interface UserPlayStat {
+  username: string;
+  totalWatchTime: number;
+  totalPlays: number;
+  lastPlayTime: number;
+  recentRecords: PlayRecord[];
+  avgWatchTime: number;
+  mostWatchedSource: string;
+  totalMovies?: number;
+  firstWatchDate?: number;
+  lastUpdateTime?: number;
+  createdAt?: number;
+  loginDays?: number;
+  lastLoginDate?: number;
+  lastLoginTime?: number;
+  firstLoginTime?: number;
+  loginCount?: number;
+  activeStreak?: number;
+  continuousLoginDays?: number;
+}
+
+// 全站播放统计数据结构
+export interface PlayStatsResult {
+  totalUsers: number;
+  totalWatchTime: number;
+  totalPlays: number;
+  avgWatchTimePerUser: number;
+  avgPlaysPerUser: number;
+  userStats: Array<{
+    username: string;
+    totalWatchTime: number;
+    totalPlays: number;
+    lastPlayTime: number;
+    recentRecords: PlayRecord[];
+    avgWatchTime: number;
+    mostWatchedSource: string;
+    registrationDays: number;
+    lastLoginTime: number;
+    loginCount: number;
+    createdAt: number;
+  }>;
+  topSources: Array<{ source: string; count: number }>;
+  dailyStats: Array<{ date: string; watchTime: number; plays: number }>;
+  registrationStats: {
+    todayNewUsers: number;
+    totalRegisteredUsers: number;
+    registrationTrend: Array<{ date: string; newUsers: number }>;
+  };
+  activeUsers: {
+    daily: number;
+    weekly: number;
+    monthly: number;
+  };
+}
+
+// 内容热度统计数据结构
+export interface ContentStat {
+  source: string;
+  id: string;
+  title: string;
+  source_name: string;
+  cover: string;
+  year: string;
+  playCount: number;
+  totalWatchTime: number;
+  averageWatchTime: number;
+  lastPlayed: number;
+  uniqueUsers: number;
 }

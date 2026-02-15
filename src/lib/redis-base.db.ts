@@ -1723,4 +1723,179 @@ export abstract class BaseRedisStorage implements IStorage {
     // 清除缓存
     userInfoCache?.delete(userName);
   }
+
+  // ---------- 播放统计相关 ----------
+  private userStatsKey(userName: string) {
+    return `u:${userName}:stats`;
+  }
+
+  async getUserPlayStat(userName: string): Promise<import('./types').UserPlayStat> {
+    try {
+      const playRecords = await this.getAllPlayRecords(userName);
+      const records = Object.values(playRecords);
+
+      if (records.length === 0) {
+        let loginStats = {
+          loginCount: 0,
+          firstLoginTime: 0,
+          lastLoginTime: 0,
+          lastLoginDate: 0
+        };
+
+        try {
+          const loginStatsKey = `user_login_stats:${userName}`;
+          const storedLoginStats = await this.withRetry(() => this.adapter.get(loginStatsKey));
+          if (storedLoginStats) {
+            const parsed = JSON.parse(storedLoginStats);
+            loginStats = {
+              loginCount: parsed.loginCount || 0,
+              firstLoginTime: parsed.firstLoginTime || 0,
+              lastLoginTime: parsed.lastLoginTime || 0,
+              lastLoginDate: parsed.lastLoginDate || parsed.lastLoginTime || 0
+            };
+          }
+        } catch (error) {
+          console.error(`获取用户 ${userName} 登入统计失败:`, error);
+        }
+
+        return {
+          username: userName,
+          totalWatchTime: 0,
+          totalPlays: 0,
+          lastPlayTime: 0,
+          recentRecords: [],
+          avgWatchTime: 0,
+          mostWatchedSource: '',
+          totalMovies: 0,
+          firstWatchDate: Date.now(),
+          lastUpdateTime: Date.now(),
+          loginCount: loginStats.loginCount,
+          firstLoginTime: loginStats.firstLoginTime,
+          lastLoginTime: loginStats.lastLoginTime,
+          lastLoginDate: loginStats.lastLoginDate
+        };
+      }
+
+      const totalWatchTime = records.reduce((sum, record) => sum + (record.play_time || 0), 0);
+      const totalPlays = records.length;
+      const lastPlayTime = Math.max(...records.map(r => r.save_time || 0));
+      const totalMovies = new Set(records.map(r => `${r.title}_${r.source_name}_${r.year}`)).size;
+      const firstWatchDate = Math.min(...records.map(r => r.save_time || Date.now()));
+      const recentRecords = records
+        .sort((a, b) => (b.save_time || 0) - (a.save_time || 0))
+        .slice(0, 10);
+      const avgWatchTime = totalPlays > 0 ? totalWatchTime / totalPlays : 0;
+
+      const sourceMap = new Map<string, number>();
+      records.forEach(record => {
+        const sourceName = record.source_name || '未知来源';
+        const count = sourceMap.get(sourceName) || 0;
+        sourceMap.set(sourceName, count + 1);
+      });
+
+      const mostWatchedSource = sourceMap.size > 0
+        ? Array.from(sourceMap.entries()).reduce((a, b) => a[1] > b[1] ? a : b)[0]
+        : '';
+
+      let loginStats = {
+        loginCount: 0,
+        firstLoginTime: 0,
+        lastLoginTime: 0,
+        lastLoginDate: 0
+      };
+
+      try {
+        const loginStatsKey = `user_login_stats:${userName}`;
+        const storedLoginStats = await this.withRetry(() => this.adapter.get(loginStatsKey));
+        if (storedLoginStats) {
+          const parsed = JSON.parse(storedLoginStats);
+          loginStats = {
+            loginCount: parsed.loginCount || 0,
+            firstLoginTime: parsed.firstLoginTime || 0,
+            lastLoginTime: parsed.lastLoginTime || 0,
+            lastLoginDate: parsed.lastLoginDate || parsed.lastLoginTime || 0
+          };
+        }
+      } catch (error) {
+        console.error(`获取用户 ${userName} 登入统计失败:`, error);
+      }
+
+      return {
+        username: userName,
+        totalWatchTime,
+        totalPlays,
+        lastPlayTime,
+        recentRecords,
+        avgWatchTime,
+        mostWatchedSource,
+        totalMovies,
+        firstWatchDate,
+        lastUpdateTime: Date.now(),
+        loginCount: loginStats.loginCount,
+        firstLoginTime: loginStats.firstLoginTime,
+        lastLoginTime: loginStats.lastLoginTime,
+        lastLoginDate: loginStats.lastLoginDate
+      };
+    } catch (error) {
+      console.error(`获取用户 ${userName} 统计失败:`, error);
+      return {
+        username: userName,
+        totalWatchTime: 0,
+        totalPlays: 0,
+        lastPlayTime: 0,
+        recentRecords: [],
+        avgWatchTime: 0,
+        mostWatchedSource: '',
+        totalMovies: 0,
+        firstWatchDate: Date.now(),
+        lastUpdateTime: Date.now(),
+        loginCount: 0,
+        firstLoginTime: 0,
+        lastLoginTime: 0,
+        lastLoginDate: 0
+      };
+    }
+  }
+
+  async updatePlayStatistics(
+    _userName: string,
+    _source: string,
+    _id: string,
+    _watchTime: number
+  ): Promise<void> {
+    // 播放统计在获取时实时计算，无需额外处理
+  }
+
+  async updateUserLoginStats(
+    userName: string,
+    loginTime: number,
+    isFirstLogin?: boolean
+  ): Promise<void> {
+    try {
+      const loginStatsKey = `user_login_stats:${userName}`;
+
+      const currentStats = await this.withRetry(() => this.adapter.get(loginStatsKey));
+      const loginStats = currentStats ? JSON.parse(currentStats) : {
+        loginCount: 0,
+        firstLoginTime: null,
+        lastLoginTime: null,
+        lastLoginDate: null
+      };
+
+      loginStats.loginCount = (loginStats.loginCount || 0) + 1;
+      loginStats.lastLoginTime = loginTime;
+      loginStats.lastLoginDate = loginTime;
+
+      if (isFirstLogin || !loginStats.firstLoginTime) {
+        loginStats.firstLoginTime = loginTime;
+      }
+
+      await this.withRetry(() => this.adapter.set(loginStatsKey, JSON.stringify(loginStats)));
+
+      console.log(`用户 ${userName} 登入统计已更新:`, loginStats);
+    } catch (error) {
+      console.error(`更新用户 ${userName} 登入统计失败:`, error);
+      throw error;
+    }
+  }
 }

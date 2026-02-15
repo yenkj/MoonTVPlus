@@ -9,6 +9,14 @@ interface DataMigrationProps {
   onRefreshConfig?: () => Promise<void>;
 }
 
+type SelectedFileType = {
+  name: string;
+  size: number;
+  type: string;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  text: () => Promise<string>;
+};
+
 interface AlertModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -141,7 +149,7 @@ const AlertModal = ({
 const DataMigration = ({ onRefreshConfig }: DataMigrationProps) => {
   const [exportPassword, setExportPassword] = useState('');
   const [importPassword, setImportPassword] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<SelectedFileType | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [alertModal, setAlertModal] = useState<{
@@ -241,7 +249,13 @@ const DataMigration = ({ onRefreshConfig }: DataMigrationProps) => {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setSelectedFile(file);
+      setSelectedFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        arrayBuffer: () => file.arrayBuffer(),
+        text: () => file.text(),
+      });
     }
   };
 
@@ -268,8 +282,9 @@ const DataMigration = ({ onRefreshConfig }: DataMigrationProps) => {
     try {
       setIsImporting(true);
 
+      const fileBlob = new Blob([await selectedFile.arrayBuffer()], { type: selectedFile.type });
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append('file', fileBlob, selectedFile.name);
       formData.append('password', importPassword);
 
       const response = await fetch('/api/admin/data_migration/import', {

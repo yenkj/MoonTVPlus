@@ -4,7 +4,7 @@ import { AdminConfig } from './admin.types';
 import { MusicPlayRecord } from './db.client';
 import { KvrocksStorage } from './kvrocks.db';
 import { RedisStorage } from './redis.db';
-import { DanmakuFilterConfig,Favorite, IStorage, PlayRecord, SkipConfig } from './types';
+import { ContentStat, DanmakuFilterConfig, Favorite, IStorage, PlayRecord, PlayStatsResult, SkipConfig, UserPlayStat } from './types';
 import { UpstashRedisStorage } from './upstash.db';
 
 // storage type 常量: 'localstorage' | 'redis' | 'upstash' | 'kvrocks' | 'd1' | 'postgres'，默认 'localstorage'
@@ -718,6 +718,81 @@ export class DbManager {
     if (typeof (this.storage as any).deleteGlobalValue === 'function') {
       await (this.storage as any).deleteGlobalValue(key);
     }
+  }
+
+  // ---------- 播放统计相关 ----------
+  async getPlayStats(): Promise<PlayStatsResult> {
+    if (typeof (this.storage as any).getPlayStats === 'function') {
+      return (this.storage as any).getPlayStats();
+    }
+    return {
+      totalUsers: 0,
+      totalWatchTime: 0,
+      totalPlays: 0,
+      avgWatchTimePerUser: 0,
+      avgPlaysPerUser: 0,
+      userStats: [],
+      topSources: [],
+      dailyStats: [],
+      registrationStats: {
+        todayNewUsers: 0,
+        totalRegisteredUsers: 0,
+        registrationTrend: [],
+      },
+      activeUsers: {
+        daily: 0,
+        weekly: 0,
+        monthly: 0,
+      },
+    };
+  }
+
+  async getUserPlayStat(userName: string): Promise<UserPlayStat> {
+    if (typeof (this.storage as any).getUserPlayStat === 'function') {
+      return (this.storage as any).getUserPlayStat(userName);
+    }
+    return {
+      username: userName,
+      totalWatchTime: 0,
+      totalPlays: 0,
+      lastPlayTime: 0,
+      recentRecords: [],
+      avgWatchTime: 0,
+      mostWatchedSource: ''
+    };
+  }
+
+  async getContentStats(limit = 10): Promise<ContentStat[]> {
+    if (typeof (this.storage as any).getContentStats === 'function') {
+      return (this.storage as any).getContentStats(limit);
+    }
+    return [];
+  }
+
+  async updatePlayStatistics(
+    userName: string,
+    source: string,
+    id: string,
+    watchTime: number
+  ): Promise<void> {
+    if (typeof (this.storage as any).updatePlayStatistics === 'function') {
+      await (this.storage as any).updatePlayStatistics(userName, source, id, watchTime);
+    }
+  }
+
+  async updateUserLoginStats(
+    userName: string,
+    loginTime: number,
+    isFirstLogin?: boolean
+  ): Promise<void> {
+    if (typeof (this.storage as any).updateUserLoginStats === 'function') {
+      await (this.storage as any).updateUserLoginStats(userName, loginTime, isFirstLogin);
+    }
+  }
+
+  isStatsSupported(): boolean {
+    const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
+    return ['redis', 'upstash', 'kvrocks'].includes(storageType);
   }
 }
 

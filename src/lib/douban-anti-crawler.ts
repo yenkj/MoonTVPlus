@@ -1,5 +1,8 @@
-import * as cheerio from 'cheerio';
+import 'server-only';
+
 import { createHash } from 'crypto';
+
+import * as cheerio from 'cheerio';
 
 /**
  * Cookie 缓存
