@@ -3284,6 +3284,29 @@ function PlayPageClient() {
     }
   }, [searchParams, currentSource, currentId, availableSources, currentEpisodeIndex]);
 
+  // 辅助函数：优先选择中文字幕
+  const getPreferredSubtitle = (subtitles: any[]): any => {
+    if (!subtitles || subtitles.length === 0) return null;
+    
+    // 优先级顺序：简体中文 > 中简 > 中文 > Chinese Simplified > Chinese > chi > 第一个
+    const chineseKeywords = [
+      '简体中文', '中简', '简体', '中文', 
+      'chinese simplified', 'chinese_simplified', 'chinese-simplified',
+      'chinese', 'chi', 'zh', 'zh-cn', 'zh_cn', 'zh-cn'
+    ];
+    
+    for (const keyword of chineseKeywords) {
+      const found = subtitles.find(sub => {
+        const label = (sub.label || '').toLowerCase();
+        const language = (sub.language || '').toLowerCase();
+        return label.includes(keyword.toLowerCase()) || language.includes(keyword.toLowerCase());
+      });
+      if (found) return found;
+    }
+    
+    return subtitles[0];
+  };
+
   // 监听 detail 和 currentEpisodeIndex 变化，动态更新字幕
   useEffect(() => {
     if (!artPlayerRef.current || !detail) return;
@@ -3293,7 +3316,8 @@ function PlayPageClient() {
 
     // 如果有字幕，更新播放器字幕
     if (currentSubtitles.length > 0) {
-      artPlayerRef.current.subtitle.switch(currentSubtitles[0].url, {
+      const preferredSubtitle = getPreferredSubtitle(currentSubtitles);
+      artPlayerRef.current.subtitle.switch(preferredSubtitle.url, {
         type: 'vtt',
         style: {
           color: '#fff',
@@ -4826,6 +4850,26 @@ function PlayPageClient() {
         const currentSubtitles = detailRef.current?.subtitles?.[currentEpisodeIndex] || [];
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
 
+        // 优先选择中文字幕
+        const getPreferredSubtitle = (subtitles: any[]): any => {
+          if (!subtitles || subtitles.length === 0) return null;
+          const chineseKeywords = [
+            '简体中文', '中简', '简体', '中文', 
+            'chinese simplified', 'chinese_simplified', 'chinese-simplified',
+            'chinese', 'chi', 'zh', 'zh-cn', 'zh_cn'
+          ];
+          for (const keyword of chineseKeywords) {
+            const found = subtitles.find(sub => {
+              const label = (sub.label || '').toLowerCase();
+              const language = (sub.language || '').toLowerCase();
+              return label.includes(keyword.toLowerCase()) || language.includes(keyword.toLowerCase());
+            });
+            if (found) return found;
+          }
+          return subtitles[0];
+        };
+        const preferredSubtitle = getPreferredSubtitle(currentSubtitles);
+
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
         url: videoUrl,
@@ -4845,9 +4889,9 @@ function PlayPageClient() {
         aspectRatio: false,
         fullscreen: !isIOS,  // iOS 禁用原生全屏按钮，避免触发系统播放器
         fullscreenWeb: true,  // 保留网页全屏按钮（所有平台）
-        ...(currentSubtitles.length > 0 ? {
+        ...(preferredSubtitle ? {
           subtitle: {
-            url: currentSubtitles[0].url,
+            url: preferredSubtitle.url,
             type: 'vtt',
             style: {
               color: '#fff',
