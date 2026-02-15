@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       Role: 'owner',
       Config: config,
     };
-    if (username === process.env.USERNAME || authInfo.role === 'owner') {
+    if (username === process.env.USERNAME) {
       result.Role = 'owner';
     } else {
       // 从新版数据库获取用户信息
