@@ -790,6 +790,29 @@ export class DbManager {
     }
   }
 
+  async getUserLoginStats(userName: string): Promise<{
+    loginCount: number;
+    firstLoginTime: number | null;
+    lastLoginTime: number | null;
+    lastLoginDate: number | null;
+  } | null> {
+    if (typeof (this.storage as any).getUserLoginStats === 'function') {
+      return await (this.storage as any).getUserLoginStats(userName);
+    }
+    return null;
+  }
+
+  async setUserLoginStats(userName: string, stats: {
+    loginCount: number;
+    firstLoginTime: number | null;
+    lastLoginTime: number | null;
+    lastLoginDate: number | null;
+  }): Promise<void> {
+    if (typeof (this.storage as any).setUserLoginStats === 'function') {
+      await (this.storage as any).setUserLoginStats(userName, stats);
+    }
+  }
+
   isStatsSupported(): boolean {
     const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'localstorage';
     return ['redis', 'upstash', 'kvrocks'].includes(storageType);
