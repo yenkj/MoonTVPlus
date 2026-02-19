@@ -76,8 +76,8 @@ export async function GET(request: Request) {
     if (contentType.toLowerCase().includes('mpegurl') || contentType.toLowerCase().includes('octet-stream')) {
       // 获取最终的响应URL（处理重定向后的URL）
       const m3u8Content = await response.text();
-      responseUsed = true;// 标记 response 已被使用
-      
+      responseUsed = true; // 标记 response 已被使用
+
       // 使用最终的响应URL作为baseUrl，而不是原始的请求URL
       const baseUrl = getBaseUrl(finalUrl);
       const originalUrl = decodeURIComponent(url || '');
