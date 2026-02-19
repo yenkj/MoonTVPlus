@@ -95,7 +95,6 @@ export async function GET(request: Request) {
       headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
       return new Response(modifiedContent, { headers });
     }
-
     // just proxy
     const headers = new Headers();
     headers.set('Content-Type', response.headers.get('Content-Type') || 'application/vnd.apple.mpegurl');
