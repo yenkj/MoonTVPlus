@@ -256,6 +256,7 @@ async function getInitConfig(configFile: string, subConfig: {
       PansouUsername: '',
       PansouPassword: '',
       PansouKeywordBlocklist: '',
+      enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
       // 评论功能开关
       EnableComments: false,
     },
@@ -432,6 +433,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       PansouUsername: '',
       PansouPassword: '',
       PansouKeywordBlocklist: '',
+      enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
       EnableComments: false,
     };
   }
@@ -448,6 +450,9 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   }
   if (adminConfig.SiteConfig.PansouKeywordBlocklist === undefined) {
     adminConfig.SiteConfig.PansouKeywordBlocklist = '';
+  }
+  if (adminConfig.SiteConfig.enabledCloudTypes === undefined) {
+    adminConfig.SiteConfig.enabledCloudTypes = ['baidu', 'aliyun', 'quark'];
   }
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };
