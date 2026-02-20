@@ -3,6 +3,8 @@ FROM node:24-alpine AS deps
 
 # 启用 corepack 并激活 pnpm（Node20 默认提供 corepack）
 RUN corepack enable && corepack prepare pnpm@latest --activate
+# 安装 git（mpegts.js 的依赖需要）
+RUN apk add --no-cache git
 
 WORKDIR /app
 
