@@ -43,17 +43,15 @@ export async function GET(request: Request) {
     }
 
     const contentType = response.headers.get('Content-Type') || '';
-    // rewrite m3u8
-    if (contentType.toLowerCase().includes('mpegurl') || contentType.toLowerCase().includes('octet-stream')) {
-      // 获取最终的响应URL（处理重定向后的URL）
+    const isMpegUrl = contentType.toLowerCase().includes('mpegurl');
+    const isOctetStream = contentType.toLowerCase().includes('octet-stream');
+
+    if (isMpegUrl) {
       const finalUrl = response.url;
       const m3u8Content = await response.text();
-      responseUsed = true; // 标记 response 已被使用
+      responseUsed = true;
 
-      // 使用最终的响应URL作为baseUrl，而不是原始的请求URL
       const baseUrl = getBaseUrl(finalUrl);
-
-      // 重写 M3U8 内容
       const modifiedContent = rewriteM3U8Content(m3u8Content, baseUrl, request, allowCORS);
 
       const headers = new Headers();
@@ -64,6 +62,70 @@ export async function GET(request: Request) {
       headers.set('Cache-Control', 'no-cache');
       headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
       return new Response(modifiedContent, { headers });
+    }
+
+    if (isOctetStream) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return NextResponse.json({ error: 'Failed to read response' }, { status: 500 });
+      }
+
+      const { value: firstChunk } = await reader.read();
+      if (!firstChunk) {
+        return NextResponse.json({ error: 'Empty response' }, { status: 500 });
+      }
+
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      const firstText = decoder.decode(firstChunk, { stream: true });
+
+      if (firstText.trim().startsWith('#EXTM3U')) {
+        const chunks: Uint8Array[] = [firstChunk];
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+        const fullText = chunks.map(c => decoder.decode(c, { stream: true })).join('');
+
+        const finalUrl = response.url;
+        const baseUrl = getBaseUrl(finalUrl);
+        const modifiedContent = rewriteM3U8Content(fullText, baseUrl, request, allowCORS);
+
+        const headers = new Headers();
+        headers.set('Content-Type', 'application/vnd.apple.mpegurl');
+        headers.set('Access-Control-Allow-Origin', '*');
+        headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
+        headers.set('Cache-Control', 'no-cache');
+        headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+        return new Response(modifiedContent, { headers });
+      }
+
+      responseUsed = true;
+      const headers = new Headers();
+      headers.set('Content-Type', 'application/octet-stream');
+      headers.set('Access-Control-Allow-Origin', '*');
+      headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      headers.set('Access-Control-Allow-Headers', 'Content-Type, Range, Origin, Accept');
+      headers.set('Cache-Control', 'no-cache');
+      headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      writer.write(firstChunk);
+      (async () => {
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value) await writer.write(value);
+          }
+        } finally {
+          writer.close();
+        }
+      })();
+
+      return new Response(readable, { headers });
     }
     // just proxy
     const headers = new Headers();
