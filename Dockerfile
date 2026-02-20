@@ -5,7 +5,6 @@ FROM node:24-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@latest --activate
 # 安装 git（mpegts.js 的依赖需要）
 RUN apk add --no-cache git
-
 WORKDIR /app
 
 # 仅复制依赖清单，提高构建缓存利用率
@@ -17,6 +16,8 @@ RUN pnpm install --frozen-lockfile
 # ---- 第 2 阶段：构建项目 ----
 FROM node:24-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@latest --activate
+# 安装 git（mpegts.js 的依赖需要）
+RUN apk add --no-cache git
 WORKDIR /app
 
 # 复制依赖
