@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       PansouUsername,
       PansouPassword,
       PansouKeywordBlocklist,
+      enabledCloudTypes,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
       PansouUsername?: string;
       PansouPassword?: string;
       PansouKeywordBlocklist?: string;
+      enabledCloudTypes?: string[];
       EnableComments: boolean;
       CustomAdFilterCode?: string;
       CustomAdFilterVersion?: number;
@@ -132,6 +134,7 @@ export async function POST(request: NextRequest) {
       (BannerDataSource !== undefined && typeof BannerDataSource !== 'string') ||
       (RecommendationDataSource !== undefined && typeof RecommendationDataSource !== 'string') ||
       (PansouKeywordBlocklist !== undefined && typeof PansouKeywordBlocklist !== 'string') ||
+      (enabledCloudTypes !== undefined && !Array.isArray(enabledCloudTypes)) ||
       typeof EnableComments !== 'boolean' ||
       (CustomAdFilterCode !== undefined && typeof CustomAdFilterCode !== 'string') ||
       (CustomAdFilterVersion !== undefined && typeof CustomAdFilterVersion !== 'number') ||
@@ -188,6 +191,7 @@ export async function POST(request: NextRequest) {
       PansouUsername,
       PansouPassword,
       PansouKeywordBlocklist,
+      enabledCloudTypes,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
