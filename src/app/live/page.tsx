@@ -32,7 +32,7 @@ declare global {
 let Artplayer: any = null;
 let Hls: any = null;
 let flvjs: any = null;
-
+let mpegts: any = null;
 // 直播频道接口
 interface LiveChannel {
   id: string;
@@ -62,6 +62,7 @@ function LivePageClient() {
       import('artplayer').then(mod => { Artplayer = mod.default; });
       import('hls.js').then(mod => { Hls = mod.default; });
       import('flv.js').then(mod => { flvjs = mod.default; });
+      import('mpegts.js').then(mod => { mpegts = mod.default; });
     }
   }, []);
 
@@ -1065,6 +1066,20 @@ function LivePageClient() {
           }
         }
 
+        // 销毁 mpegts 实例
+        if (artPlayerRef.current.video && (artPlayerRef.current.video as any).mpegts) {
+          try {
+            if ((artPlayerRef.current.video as any).mpegts.unload) {
+              (artPlayerRef.current.video as any).mpegts.unload();
+            }
+            (artPlayerRef.current.video as any).mpegts.destroy();
+            (artPlayerRef.current.video as any).mpegts = null;
+          } catch (mpegtsError) {
+            console.warn('mpegts实例销毁时出错:', mpegtsError);
+            (artPlayerRef.current.video as any).mpegts = null;
+          }
+        }
+
         // 移除所有事件监听器
         artPlayerRef.current.off('ready');
         artPlayerRef.current.off('loadstart');
@@ -1440,6 +1455,36 @@ function LivePageClient() {
     video.flv = flvPlayer;
   }
 
+  function tsLoader(video: HTMLVideoElement, url: string) {
+    if (!mpegts) {
+      console.error('mpegts.js 未加载');
+      return;
+    }
+
+    const v = video as any;
+    if (v.mpegts) {
+      try {
+        v.mpegts.unload();
+        v.mpegts.destroy();
+        v.mpegts = null;
+      } catch (err) {
+        console.warn('清理 mpegts 实例时出错:', err);
+      }
+    }
+
+    const player = mpegts.createPlayer({
+      type: 'mpegts',
+      url,
+      isLive: true
+    });
+    player.attachMediaElement(video);
+    player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string) => {
+      console.error('mpegts.js error:', errorType, errorDetail);
+    });
+    player.load();
+    v.mpegts = player;
+  }
+
   // 播放器初始化
   useEffect(() => {
     const preload = async () => {
@@ -1485,8 +1530,8 @@ function LivePageClient() {
         return;
       }
 
-      // 如果不是 m3u8 或 flv 类型，设置不支持的类型并返回
-      if (type !== 'm3u8' && type !== 'flv') {
+      // 如果不是 m3u8、flv 或 ts 类型，设置不支持的类型并返回
+      if (type !== 'm3u8' && type !== 'flv' && type !== 'ts') {
         setUnsupportedType(type);
         setIsVideoLoading(false);
         return;
@@ -1495,10 +1540,12 @@ function LivePageClient() {
       // 重置不支持的类型
       setUnsupportedType(null);
 
-      const customType = { m3u8: m3u8Loader, flv: flvLoader };
+      const customType = { m3u8: m3u8Loader, flv: flvLoader, ts: tsLoader };
       const targetUrl = type === 'flv'
         ? videoUrl
-        : `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
+        : type === 'ts'
+          ? `/api/proxy/segment?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`
+          : `/api/proxy/m3u8?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`;
       try {
         // 创建新的播放器实例
         Artplayer.USE_RAF = true;
