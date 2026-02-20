@@ -47,6 +47,9 @@ export async function GET(request: NextRequest) {
     if (contentType?.includes('video/x-flv')) {
       return NextResponse.json({ success: true, type: 'flv' }, { status: 200 });
     }
+    if (contentType?.includes('octet-stream')) {
+      return NextResponse.json({ success: true, type: 'ts' }, { status: 200 });
+    }
     return NextResponse.json({ success: true, type: 'm3u8' }, { status: 200 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch', message: error }, { status: 500 });
