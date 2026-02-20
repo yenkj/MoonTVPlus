@@ -86,6 +86,9 @@ importers:
       media-icons:
         specifier: ^1.1.5
         version: 1.1.5
+      mpegts.js:
+        specifier: ^1.8.0
+        version: 1.8.0
       mux.js:
         specifier: ^6.3.0
         version: 6.3.0
