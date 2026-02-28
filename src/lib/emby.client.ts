@@ -515,11 +515,9 @@ export class EmbyClient {
       url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
     }
 
-    // 预请求 stream?Static=true 来触发 Emby 服务器处理视频文件，生成内嵌字幕
-    // 这会让 Emby 服务器分析视频文件并准备好字幕流
+    // 预请求 stream?Static=true 来触发 Emby 服务器处理视频文件，生成内嵌字幕，这会让 Emby 服务器分析视频文件并准备好字幕流
     const preloadUrl = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
-    // 使用 fetch 发送 HEAD 请求，只检查响应状态，不下载完整内容
-    // 使用 await 确保请求被发送，但只等待响应头，不下载完整内容
+    // 使用 fetch 发送 HEAD 请求，只检查响应状态，不下载完整内容，使用 await 确保请求被发送，但只等待响应头，不下载完整内容
     try {
       const response = await fetch(preloadUrl, { method: 'HEAD' });
       if (response.ok) {
