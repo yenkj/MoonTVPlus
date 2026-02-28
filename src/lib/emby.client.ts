@@ -487,6 +487,20 @@ export class EmbyClient {
       return proxyUrl;
     }
 
+    // 核心修复：在拼接 URL 之前，必须先请求一次 PlaybackInfo
+    // 这步操作会通知 Emby 服务端准备好该视频的所有流（包括内嵌字幕索引）
+    try {
+      await fetch(`${this.serverUrl}/Items/${itemId}/PlaybackInfo?UserId=${this.userId}&api_key=${token}`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          DeviceProfile: {} // 告知服务端初始化该视频的播放会话
+        })
+      });
+    } catch (error) {
+      console.error('初始化 Emby 播放信息失败:', error);
+    }
+
     // 原有的直接播放逻辑
     let url: string;
 
