@@ -519,17 +519,17 @@ export class EmbyClient {
     // 这会让 Emby 服务器分析视频文件并准备好字幕流
     const preloadUrl = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
     // 使用 fetch 发送 HEAD 请求，只检查响应状态，不下载完整内容
-    fetch(preloadUrl, { method: 'HEAD' })
-      .then(response => {
-        if (response.ok) {
-          console.log('[Emby] 预请求成功，视频文件已处理');
-        } else {
-          console.warn('[Emby] 预请求失败，可能影响内嵌字幕加载:', response.status);
-        }
-      })
-      .catch(error => {
-        console.warn('[Emby] 预请求出错，可能影响内嵌字幕加载:', error);
-      });
+    // 使用 await 确保请求被发送，但只等待响应头，不下载完整内容
+    try {
+      const response = await fetch(preloadUrl, { method: 'HEAD' });
+      if (response.ok) {
+        console.log('[Emby] 预请求成功，视频文件已处理');
+      } else {
+        console.warn('[Emby] 预请求失败，可能影响内嵌字幕加载:', response.status);
+      }
+    } catch (error) {
+      console.warn('[Emby] 预请求出错，可能影响内嵌字幕加载:', error);
+    }
 
     return url;
   }
