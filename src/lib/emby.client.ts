@@ -494,7 +494,14 @@ export class EmbyClient {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          DeviceProfile: {} // 告知服务端初始化该视频的播放会话
+          DeviceProfile: {
+            MaxStreamingBitrate: 120000000,
+            SubtitleProfiles: [
+              { Format: 'vtt', Method: 'External' },
+              { Format: 'vtt', Method: 'Embed' }
+            ],
+            DirectPlayProfiles: [{ Type: 'Video' }]
+          }
         })
       });
     } catch (error) {
