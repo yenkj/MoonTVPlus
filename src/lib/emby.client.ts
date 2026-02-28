@@ -487,22 +487,16 @@ export class EmbyClient {
       return proxyUrl;
     }
 
-    // 核心修复：在拼接 URL 之前，必须先请求一次 PlaybackInfo
+    // 核心修复：在拼接 URL 之前，必须先请求一次 stream?Static=true
     // 这步操作会通知 Emby 服务端准备好该视频的所有流（包括内嵌字幕索引）
     try {
-      await fetch(`${this.serverUrl}/Items/${itemId}/PlaybackInfo?UserId=${this.userId}&api_key=${token}`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          DeviceProfile: {
-            MaxStreamingBitrate: 120000000,
-            SubtitleProfiles: [
-              { Format: 'vtt', Method: 'External' },
-              { Format: 'vtt', Method: 'Embed' }
-            ],
-            DirectPlayProfiles: [{ Type: 'Video' }]
-          }
-        })
+      const preloadUrl = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
+      // 使用 GET 请求，只请求一小部分内容来触发 Emby 处理
+      await fetch(preloadUrl, {
+        method: 'GET',
+        headers: {
+          'Range': 'bytes=0-1023' // 只请求前 1KB，不下载完整内容
+        }
       });
     } catch (error) {
       console.error('初始化 Emby 播放信息失败:', error);
