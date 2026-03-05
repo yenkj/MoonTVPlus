@@ -33,6 +33,7 @@ let Artplayer: any = null;
 let Hls: any = null;
 let flvjs: any = null;
 let mpegts: any = null;
+
 // 直播频道接口
 interface LiveChannel {
   id: string;
@@ -62,7 +63,7 @@ function LivePageClient() {
       import('artplayer').then(mod => { Artplayer = mod.default; });
       import('hls.js').then(mod => { Hls = mod.default; });
       import('flv.js').then(mod => { flvjs = mod.default; });
-      import('mpegts.js').then(mod => { mpegts = mod.default; });
+	  import('mpegts.js').then(mod => { mpegts = mod.default; });
     }
   }, []);
 
@@ -1530,8 +1531,8 @@ function LivePageClient() {
         return;
       }
 
-      // 如果不是 m3u8、flv 或 ts 类型，设置不支持的类型并返回
-      if (type !== 'm3u8' && type !== 'flv' && type !== 'ts') {
+      // 如果不是 m3u8、flv 或 mp4、ts 类型，设置不支持的类型并返回
+      if (type !== 'm3u8' && type !== 'flv' && type !== 'mp4' && type !== 'ts') {
         setUnsupportedType(type);
         setIsVideoLoading(false);
         return;
@@ -1541,7 +1542,7 @@ function LivePageClient() {
       setUnsupportedType(null);
 
       const customType = { m3u8: m3u8Loader, flv: flvLoader, ts: tsLoader };
-      const targetUrl = type === 'flv'
+      const targetUrl = (type === 'flv' || type === 'mp4')
         ? videoUrl
         : type === 'ts'
           ? `/api/proxy/segment?url=${encodeURIComponent(videoUrl)}&moontv-source=${currentSourceRef.current?.key || ''}`

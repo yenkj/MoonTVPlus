@@ -162,6 +162,11 @@ export interface IStorage {
   getEmailNotificationPreference?(userName: string): Promise<boolean>;
   setEmailNotificationPreference?(userName: string, enabled: boolean): Promise<void>;
 
+  // TVBox订阅token相关
+  getTvboxSubscribeToken?(userName: string): Promise<string | null>;
+  setTvboxSubscribeToken?(userName: string, token: string): Promise<void>;
+  getUsernameByTvboxToken?(token: string): Promise<string | null>;
+
   // 播放统计相关
   getPlayStats?(): Promise<PlayStatsResult>;
   getUserPlayStat?(userName: string): Promise<UserPlayStat>;

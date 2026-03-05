@@ -16,6 +16,7 @@ interface EmbyConfig {
   appendMediaSourceId?: boolean;
   transcodeMp4?: boolean;
   proxyPlay?: boolean; // 视频播放代理开关
+  customUserAgent?: string; // 自定义User-Agent
   key?: string; // Emby源的唯一标识
 }
 
@@ -79,6 +80,7 @@ export class EmbyClient {
   private transcodeMp4: boolean;
   private proxyPlay: boolean;
   private embyKey?: string;
+  private customUserAgent: string;
 
   constructor(config: EmbyConfig) {
     let serverUrl = config.ServerURL.replace(/\/$/, '');
@@ -89,6 +91,8 @@ export class EmbyClient {
     this.transcodeMp4 = config.transcodeMp4 || false;
     this.proxyPlay = config.proxyPlay || false;
     this.embyKey = config.key;
+    // 设置自定义UA，如果没有设置则使用默认浏览器UA
+    this.customUserAgent = config.customUserAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
     // 如果 URL 不包含 /emby 路径，自动添加（除非启用了 removeEmbyPrefix）
     if (!serverUrl.endsWith('/emby') && !this.removeEmbyPrefix) {
@@ -126,6 +130,7 @@ export class EmbyClient {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'User-Agent': this.customUserAgent,
     };
 
     if (this.apiKey) {
@@ -150,6 +155,7 @@ export class EmbyClient {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-Emby-Authorization': 'MediaBrowser Client="LunaTV", Device="Web", DeviceId="lunatv-web", Version="1.0.0"',
+        'User-Agent': this.customUserAgent,
       },
       body: params.toString(),
     });
@@ -424,7 +430,18 @@ export class EmbyClient {
     }
   }
 
-  getImageUrl(itemId: string, imageType: 'Primary' | 'Backdrop' | 'Logo' = 'Primary', maxWidth?: number): string {
+  getImageUrl(itemId: string, imageType: 'Primary' | 'Backdrop' | 'Logo' = 'Primary', maxWidth?: number, proxyToken?: string): string {
+    // 如果启用了代理播放且提供了 token，返回代理 URL
+    if (this.proxyPlay && proxyToken) {
+      const params = new URLSearchParams();
+      params.set('imageType', imageType);
+      if (maxWidth) params.set('maxWidth', maxWidth.toString());
+      if (this.embyKey) params.set('embyKey', this.embyKey);
+
+      return `/api/emby/image/${proxyToken}/${itemId}?${params.toString()}`;
+    }
+
+    // 否则返回直连 URL
     const params = new URLSearchParams();
     const token = this.apiKey || this.authToken;
 
@@ -468,6 +485,7 @@ export class EmbyClient {
   }
 
   async getStreamUrl(itemId: string, direct = true, forceDirectUrl = false): Promise<string> {
+    await this.ensureAuthenticated();
     const token = this.apiKey || this.authToken;
 
     // 如果启用了代理播放且不是强制获取直接URL，返回代理URL
@@ -571,5 +589,13 @@ export class EmbyClient {
       });
 
     return subtitles;
+  }
+
+  getUserAgent(): string {
+    return this.customUserAgent;
+  }
+
+  isProxyEnabled(): boolean {
+    return this.proxyPlay;
   }
 }
