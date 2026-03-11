@@ -534,8 +534,8 @@ export class EmbyClient {
       if (this.transcodeMp4) {
         url = `${this.serverUrl}/Videos/${itemId}/stream.mp4?api_key=${token}`;
       } else {
-        const playSessionId = generatePlaySessionId();  
-        url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
+        const playSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&AudioCodec=aac&AudioBitrate=320000&MaxAudioChannels=6&PlaySessionId=${playSessionId}`;
       }
 
       // 选项2: 拼接MediaSourceId参数
@@ -550,8 +550,9 @@ export class EmbyClient {
         }
       }
     } else {
-      const playSessionId = generatePlaySessionId();
-      url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
+      // --- 最小修改：默认不直接请求 master.m3u8，也带上音频保底参数 ---
+      const playSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+      url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&AudioCodec=aac&AudioBitrate=320000&MaxAudioChannels=6&PlaySessionId=${playSessionId}`;
     }
 
     return url;
