@@ -534,6 +534,7 @@ export class EmbyClient {
       if (this.transcodeMp4) {
         url = `${this.serverUrl}/Videos/${itemId}/stream.mp4?api_key=${token}`;
       } else {
+      // 带音频参数的 HLS
         const playSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
         url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&AudioCodec=aac&AudioBitrate=320000&MaxAudioChannels=6&PlaySessionId=${playSessionId}`;
       }
@@ -550,7 +551,7 @@ export class EmbyClient {
         }
       }
     } else {
-      // --- 最小修改：默认不直接请求 master.m3u8，也带上音频保底参数 ---
+      // 也带上音频保底参数
       const playSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
       url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&AudioCodec=aac&AudioBitrate=320000&MaxAudioChannels=6&PlaySessionId=${playSessionId}`;
     }
