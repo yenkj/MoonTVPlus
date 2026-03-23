@@ -537,6 +537,7 @@ export class EmbyClient {
       // 带音频参数的 HLS
         const playSessionId = generatePlaySessionId();  
         url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
+    }
 
       // 选项2: 拼接MediaSourceId参数
       if (this.appendMediaSourceId) {
@@ -553,6 +554,7 @@ export class EmbyClient {
       // 也带上音频保底参数
       const playSessionId = generatePlaySessionId();
       url = `${this.serverUrl}/Videos/${itemId}/master.m3u8?api_key=${token}&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
+    }
 
     return url;
   }
