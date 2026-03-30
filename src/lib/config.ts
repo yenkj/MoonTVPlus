@@ -475,7 +475,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   if (adminConfig.SiteConfig.MagnetAcgripReverseProxy === undefined) {
     adminConfig.SiteConfig.MagnetAcgripReverseProxy = '';
   }
-  }
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };
   }
