@@ -257,6 +257,11 @@ async function getInitConfig(configFile: string, subConfig: {
       PansouPassword: '',
       PansouKeywordBlocklist: '',
       enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
+      // 磁链配置
+      MagnetProxy: '',
+      MagnetMikanReverseProxy: '',
+      MagnetDmhyReverseProxy: '',
+      MagnetAcgripReverseProxy: '',
       // 评论功能开关
       EnableComments: false,
     },
@@ -434,6 +439,10 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       PansouPassword: '',
       PansouKeywordBlocklist: '',
       enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
+      MagnetProxy: '',
+      MagnetMikanReverseProxy: '',
+      MagnetDmhyReverseProxy: '',
+      MagnetAcgripReverseProxy: '',
       EnableComments: false,
     };
   }
@@ -453,6 +462,19 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   }
   if (adminConfig.SiteConfig.enabledCloudTypes === undefined) {
     adminConfig.SiteConfig.enabledCloudTypes = ['baidu', 'aliyun', 'quark'];
+  }
+  if (adminConfig.SiteConfig.MagnetProxy === undefined) {
+    adminConfig.SiteConfig.MagnetProxy = '';
+  }
+  if (adminConfig.SiteConfig.MagnetMikanReverseProxy === undefined) {
+    adminConfig.SiteConfig.MagnetMikanReverseProxy = '';
+  }
+  if (adminConfig.SiteConfig.MagnetDmhyReverseProxy === undefined) {
+    adminConfig.SiteConfig.MagnetDmhyReverseProxy = '';
+  }
+  if (adminConfig.SiteConfig.MagnetAcgripReverseProxy === undefined) {
+    adminConfig.SiteConfig.MagnetAcgripReverseProxy = '';
+  }
   }
   if (!adminConfig.UserConfig) {
     adminConfig.UserConfig = { Users: [] };

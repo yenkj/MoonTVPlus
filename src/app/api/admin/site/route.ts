@@ -51,6 +51,10 @@ export async function POST(request: NextRequest) {
       PansouPassword,
       PansouKeywordBlocklist,
       enabledCloudTypes,
+      MagnetProxy,
+      MagnetMikanReverseProxy,
+      MagnetDmhyReverseProxy,
+      MagnetAcgripReverseProxy,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
@@ -93,6 +97,10 @@ export async function POST(request: NextRequest) {
       PansouPassword?: string;
       PansouKeywordBlocklist?: string;
       enabledCloudTypes?: string[];
+      MagnetProxy?: string;
+      MagnetMikanReverseProxy?: string;
+      MagnetDmhyReverseProxy?: string;
+      MagnetAcgripReverseProxy?: string;
       EnableComments: boolean;
       CustomAdFilterCode?: string;
       CustomAdFilterVersion?: number;
@@ -135,6 +143,10 @@ export async function POST(request: NextRequest) {
       (RecommendationDataSource !== undefined && typeof RecommendationDataSource !== 'string') ||
       (PansouKeywordBlocklist !== undefined && typeof PansouKeywordBlocklist !== 'string') ||
       (enabledCloudTypes !== undefined && !Array.isArray(enabledCloudTypes)) ||
+      (MagnetProxy !== undefined && typeof MagnetProxy !== 'string') ||
+      (MagnetMikanReverseProxy !== undefined && typeof MagnetMikanReverseProxy !== 'string') ||
+      (MagnetDmhyReverseProxy !== undefined && typeof MagnetDmhyReverseProxy !== 'string') ||
+      (MagnetAcgripReverseProxy !== undefined && typeof MagnetAcgripReverseProxy !== 'string') ||
       typeof EnableComments !== 'boolean' ||
       (CustomAdFilterCode !== undefined && typeof CustomAdFilterCode !== 'string') ||
       (CustomAdFilterVersion !== undefined && typeof CustomAdFilterVersion !== 'number') ||
@@ -192,6 +204,10 @@ export async function POST(request: NextRequest) {
       PansouPassword,
       PansouKeywordBlocklist,
       enabledCloudTypes,
+      MagnetProxy,
+      MagnetMikanReverseProxy,
+      MagnetDmhyReverseProxy,
+      MagnetAcgripReverseProxy,
       EnableComments,
       CustomAdFilterCode,
       CustomAdFilterVersion,
