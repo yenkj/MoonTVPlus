@@ -19,7 +19,8 @@ export const changelog: ChangelogEntry[] = [
     "新增网盘有效性检测功能",
     "新增首页背景图设置",
     "videocard右键菜单标题省略时增加tooptip",
-    "新增电子书室功能"
+    "新增电子书室功能",
+    "新增快速优选模式"
     ],
     changed: [
     "优化漫画展馆的搜索速度",
