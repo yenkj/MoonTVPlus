@@ -81,7 +81,7 @@ export function useVoiceChat({
       return stream;
     } catch (err) {
       console.error('[VoiceChat] Failed to get local stream:', err);
-      setError('无法访问麦克风，请检查权限设置');
+      setError('无法访问麦克风，请询问站长https网址并检查权限设置');
       throw err;
     }
   }, []);
