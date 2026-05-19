@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getAuthInfoFromCookie } from '@/lib/auth';
+import { getConfig } from '@/lib/config';
 import { ensureQuarkPlayFolder, getQuarkPlayHeaders, getQuarkPlayUrls, saveQuarkShareFile } from '@/lib/netdisk/quark.client';
 import { refreshQuarkNetdiskSession } from '@/lib/netdisk/quark-session-cache';
 import { resolveQuarkSession } from '@/lib/netdisk/quark-session-resolver';
@@ -52,89 +53,112 @@ export async function GET(request: NextRequest) {
     }
     refreshQuarkNetdiskSession(id);
 
-    const playUrls = await getQuarkPlayUrls(cookie, savedFileId);
+    const config = await getConfig();
+    const tvOptions = {
+      refreshToken: config.NetDiskConfig?.Quark?.TvRefreshToken,
+      deviceId: config.NetDiskConfig?.Quark?.TvDeviceId,
+    };
+    const playUrls = await getQuarkPlayUrls(cookie, savedFileId, tvOptions);
     const selected = playUrls.find((item) => item.name === quality) || playUrls[0];
-    if (!selected) {
+    const candidates = [
+      ...(selected ? [selected] : []),
+      ...playUrls.filter((item) => item.url !== selected?.url),
+    ];
+    if (candidates.length === 0) {
       return NextResponse.json({ error: '未获取到夸克播放地址' }, { status: 500 });
     }
 
     const range = request.headers.get('range');
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 300000);
+    const hasNoRange = !range;
+    const upstreamRange = range || 'bytes=0-1048575';
+    let lastUpstreamStatus = 0;
 
-    try {
-      const upstream = await fetch(selected.url, {
-        headers: {
-          ...getQuarkPlayHeaders(cookie),
-          ...(range ? { Range: range } : {}),
-        },
-        cache: 'no-store',
-        signal: abortController.signal,
-      });
+    for (const candidate of candidates) {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 300000);
 
-      clearTimeout(timeoutId);
+      try {
+        const upstream = await fetch(candidate.url, {
+          headers: {
+            ...getQuarkPlayHeaders(cookie),
+            Range: upstreamRange,
+          },
+          cache: 'no-store',
+          signal: abortController.signal,
+        });
 
-      if (!upstream.ok || !upstream.body) {
-        return NextResponse.json(
-          { error: `夸克视频代理失败 (${upstream.status})` },
-          { status: upstream.status || 500 }
-        );
-      }
+        clearTimeout(timeoutId);
+        lastUpstreamStatus = upstream.status;
 
-      const responseHeaders = new Headers();
-      const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
-      copyHeaders.forEach((name) => {
-        const value = upstream.headers.get(name);
-        if (value) responseHeaders.set(name, value);
-      });
-      responseHeaders.set('Cache-Control', 'private, no-store');
+        if (!upstream.ok || !upstream.body) {
+          try {
+            await upstream.body?.cancel();
+          } catch {
+            void 0;
+          }
+          continue;
+        }
 
-      const { readable, writable } = new TransformStream();
-      const reader = upstream.body.getReader();
+        const responseHeaders = new Headers();
+        const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
+        copyHeaders.forEach((name) => {
+          const value = upstream.headers.get(name);
+          if (value) responseHeaders.set(name, value);
+        });
+        responseHeaders.set('Cache-Control', 'private, no-store');
 
-      void (async () => {
-        const writer = writable.getWriter();
-        try {
-          let streamDone = false;
-          while (!streamDone) {
-            const { done, value } = await reader.read();
-            if (done) {
-              streamDone = true;
-            } else {
-              await writer.write(value);
+        const { readable, writable } = new TransformStream();
+        const reader = upstream.body.getReader();
+
+        void (async () => {
+          const writer = writable.getWriter();
+          try {
+            let streamDone = false;
+            while (!streamDone) {
+              const { done, value } = await reader.read();
+              if (done) {
+                streamDone = true;
+              } else {
+                await writer.write(value);
+              }
+            }
+          } catch {
+            try {
+              await reader.cancel();
+            } catch {
+              void 0;
+            }
+          } finally {
+            try {
+              reader.releaseLock();
+            } catch {
+              void 0;
+            }
+            try {
+              await writer.close();
+            } catch {
+              void 0;
             }
           }
-        } catch {
-          try {
-            await reader.cancel();
-          } catch {
-            void 0;
-          }
-        } finally {
-          try {
-            reader.releaseLock();
-          } catch {
-            void 0;
-          }
-          try {
-            await writer.close();
-          } catch {
-            void 0;
-          }
-        }
-      })();
+        })();
 
-      return new Response(readable, {
-        status: range && upstream.headers.get('content-range') ? 206 : upstream.status,
-        headers: responseHeaders,
-      });
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
-        return NextResponse.json({ error: '夸克网盘代理超时' }, { status: 504 });
+        return new Response(readable, {
+          status: hasNoRange ? 206 : (upstream.headers.get('content-range') ? 206 : upstream.status),
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          lastUpstreamStatus = 504;
+          continue;
+        }
       }
-      throw error;
     }
+
+    return NextResponse.json(
+      { error: `夸克视频代理失败 (${lastUpstreamStatus || 500})` },
+      { status: lastUpstreamStatus || 500 }
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '夸克网盘代理失败' },
