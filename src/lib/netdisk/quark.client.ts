@@ -1,8 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-console */
 
+import { createHash } from 'crypto';
+
 const QUARK_SHARE_API_BASE = 'https://drive-h.quark.cn/1/clouddrive';
 const QUARK_DRIVE_API_BASE = 'https://drive-pc.quark.cn/1/clouddrive';
 const QUARK_QUERY = 'pr=ucpro&fr=pc';
+const QUARK_TV_API_BASE = 'https://open-api-drive.quark.cn';
+const QUARK_TV_CODE_API_BASE = 'http://api.extscreen.com/quarkdrive';
+const QUARK_TV_CLIENT_ID = 'd3194e61504e493eb6222857bccfed94';
+const QUARK_TV_SIGN_KEY = 'kw2dvtd7p4t3pjl2d9ed9yc8yej8kw2d';
+const QUARK_TV_APP_VER = '1.5.6';
+const QUARK_TV_CHANNEL = 'CP';
+const QUARK_TV_USER_AGENT =
+  'Mozilla/5.0 (Linux; U; Android 13; zh-cn; M2004J7AC Build/UKQ1.231108.001) AppleWebKit/533.1 (KHTML, like Gecko) Mobile Safari/533.1';
+
+let quarkTvAccessTokenCache: { refreshToken: string; accessToken: string; expiresAt: number } | null = null;
 
 export interface QuarkShareLinkInfo {
   pwdId: string;
@@ -40,6 +52,11 @@ export interface QuarkShareVideoListResult {
   }>;
 }
 
+interface QuarkTvPlayOptions {
+  refreshToken?: string;
+  deviceId?: string;
+}
+
 const VIDEO_EXTENSIONS = [
   '.mp4',
   '.mkv',
@@ -67,10 +84,12 @@ function buildApiUrl(base: string, path: string, query = '') {
 
 function getHeaders(cookie: string): HeadersInit {
   return {
+    accept: 'application/json, text/plain, */*',
     'content-type': 'application/json',
     cookie,
     origin: 'https://pan.quark.cn',
     referer: 'https://pan.quark.cn/',
+    'accept-language': 'zh-CN,zh;q=0.9',
     'user-agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
   };
@@ -78,9 +97,11 @@ function getHeaders(cookie: string): HeadersInit {
 
 export function getQuarkPlayHeaders(cookie: string): Record<string, string> {
   return {
+    accept: '*/*',
     cookie,
     origin: 'https://pan.quark.cn',
     referer: 'https://pan.quark.cn/',
+    'accept-language': 'zh-CN,zh;q=0.9',
     'user-agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
   };
@@ -141,6 +162,112 @@ function ensureOk(data: any, fallbackMessage: string) {
     return;
   }
   throw new Error(data?.message || data?.msg || fallbackMessage);
+}
+
+function md5Hex(value: string) {
+  return createHash('md5').update(value).digest('hex');
+}
+
+function sha256Hex(value: string) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function getQuarkTvDeviceId(refreshToken: string, deviceId?: string) {
+  return deviceId || process.env.QUARK_TV_DEVICE_ID || md5Hex(`moontvplus:${refreshToken}`);
+}
+
+function buildQuarkTvQuery(refreshToken: string, pathname: string, method: string, deviceId?: string) {
+  const timestamp = Date.now().toString();
+  const tvDeviceId = getQuarkTvDeviceId(refreshToken, deviceId);
+  const reqId = md5Hex(`${tvDeviceId}${timestamp}`);
+  const token = sha256Hex(`${method}&${pathname}&${timestamp}&${QUARK_TV_SIGN_KEY}`);
+  const query = new URLSearchParams({
+    req_id: reqId,
+    app_ver: QUARK_TV_APP_VER,
+    device_id: tvDeviceId,
+    device_brand: 'Xiaomi',
+    platform: 'tv',
+    device_name: 'M2004J7AC',
+    device_model: 'M2004J7AC',
+    build_device: 'M2004J7AC',
+    build_product: 'M2004J7AC',
+    device_gpu: 'Adreno (TM) 550',
+    activity_rect: '{}',
+    channel: QUARK_TV_CHANNEL,
+  });
+
+  return {
+    query,
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      'User-Agent': QUARK_TV_USER_AGENT,
+      'x-pan-tm': timestamp,
+      'x-pan-token': token,
+      'x-pan-client-id': QUARK_TV_CLIENT_ID,
+    },
+  };
+}
+
+async function getQuarkTvAccessToken(refreshToken: string, deviceId?: string) {
+  if (
+    quarkTvAccessTokenCache?.refreshToken === refreshToken &&
+    quarkTvAccessTokenCache.expiresAt > Date.now() + 60_000
+  ) {
+    return quarkTvAccessTokenCache.accessToken;
+  }
+
+  const { query } = buildQuarkTvQuery(refreshToken, '/token', 'POST', deviceId);
+  query.set('refresh_token', refreshToken);
+
+  const response = await fetch(`${QUARK_TV_CODE_API_BASE}/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(Object.fromEntries(query.entries())),
+    cache: 'no-store',
+  });
+  const data = await parseJson(response);
+  if (data?.code !== 200 || !data?.data?.access_token) {
+    throw new Error(data?.message || data?.data?.error_info || '夸克 TV Token 刷新失败');
+  }
+
+  const accessToken = String(data.data.access_token);
+  quarkTvAccessTokenCache = {
+    refreshToken,
+    accessToken,
+    expiresAt: Date.now() + Number(data.data.expires_in || 3600) * 1000,
+  };
+  return accessToken;
+}
+
+async function getQuarkTvPlayUrl(
+  savedFileId: string,
+  options: QuarkTvPlayOptions = {}
+): Promise<string | null> {
+  const refreshToken = options.refreshToken || process.env.QUARK_TV_REFRESH_TOKEN || '';
+  if (!refreshToken) return null;
+
+  const deviceId = options.deviceId || process.env.QUARK_TV_DEVICE_ID;
+  const accessToken = await getQuarkTvAccessToken(refreshToken, deviceId);
+  const pathname = '/file';
+  const { query, headers } = buildQuarkTvQuery(refreshToken, pathname, 'GET', deviceId);
+  query.set('access_token', accessToken);
+  query.set('method', 'download');
+  query.set('group_by', 'source');
+  query.set('fid', savedFileId);
+  query.set('resolution', 'low,normal,high,super,2k,4k');
+  query.set('support', 'dolby_vision');
+
+  const response = await fetch(`${QUARK_TV_API_BASE}${pathname}?${query.toString()}`, {
+    method: 'GET',
+    headers,
+    cache: 'no-store',
+  });
+  const data = await parseJson(response);
+  if ((data?.errno && data.errno !== 0) || data?.status >= 400) {
+    throw new Error(data?.error_info || '获取夸克 TV 播放地址失败');
+  }
+
+  return data?.data?.download_url ? String(data.data.download_url) : null;
 }
 
 export function parseQuarkShareUrl(url: string, passcode = ''): QuarkShareLinkInfo {
@@ -685,14 +812,68 @@ export async function saveQuarkShareFile(
 
 export async function getQuarkPlayUrls(
   cookie: string,
-  savedFileId: string
+  savedFileId: string,
+  options: QuarkTvPlayOptions = {}
 ): Promise<Array<{ name: string; url: string; priority: number }>> {
   const safeCookie = assertQuarkCookieHeaderSafe(cookie);
   const headers = getHeaders(safeCookie);
   const urls: Array<{ name: string; url: string; priority: number }> = [];
 
   try {
-    const response = await fetch(buildApiUrl(QUARK_DRIVE_API_BASE, '/file/download'), {
+    const tvUrl = await getQuarkTvPlayUrl(savedFileId, options);
+    if (tvUrl) {
+      urls.push({
+        name: 'TV流式',
+        url: tvUrl,
+        priority: 10000,
+      });
+    }
+  } catch (error) {
+    console.warn('[quark] tv streaming url fetch failed:', error instanceof Error ? error.message : error);
+  }
+
+  try {
+    const response = await fetch(buildApiUrl(QUARK_DRIVE_API_BASE, '/file/v2/play/project'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        fid: savedFileId,
+        resolutions: 'low,normal,high,super,2k,4k',
+        supports: 'fmp4_av,m3u8,dolby_vision',
+      }),
+      cache: 'no-store',
+    });
+    const data = await parseJson(response);
+    ensureOk(data, '获取夸克转码地址失败');
+    const nameMap: Record<string, string> = {
+      FOUR_K: '4K',
+      '4K': '4K',
+      SUPER: '超清',
+      HIGH: '高清',
+      NORMAL: '流畅',
+      LOW: '低清',
+    };
+    if (Array.isArray(data?.data?.video_list)) {
+      for (const video of data.data.video_list) {
+        const videoInfo = video?.video_info || {};
+        const resolution = videoInfo?.resoultion || videoInfo?.resolution || video?.resolution;
+        const playUrl = videoInfo?.url;
+        const priority = Number(videoInfo?.width || 0);
+        if (resolution && playUrl) {
+          urls.push({
+            name: nameMap[String(resolution)] || String(resolution),
+            url: String(playUrl),
+            priority,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[quark] transcoding url fetch failed:', error instanceof Error ? error.message : error);
+  }
+
+  try {
+    const response = await fetch(buildApiUrl(QUARK_DRIVE_API_BASE, '/file/download', 'sys=win32&ve=2.5.56&ut=&guid='), {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -707,49 +888,11 @@ export async function getQuarkPlayUrls(
       urls.push({
         name: '原画',
         url: String(downloadUrl),
-        priority: 9999,
+        priority: 0,
       });
     }
-  } catch {
-    // ignore download failure, continue transcoding fallback
-  }
-
-  try {
-    const response = await fetch(buildApiUrl(QUARK_DRIVE_API_BASE, '/file/v2/play'), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        fid: savedFileId,
-        resolutions: 'normal,low,high,super,2k,4k',
-        supports: 'fmp4',
-      }),
-      cache: 'no-store',
-    });
-    const data = await parseJson(response);
-    ensureOk(data, '获取夸克转码地址失败');
-    const nameMap: Record<string, string> = {
-      FOUR_K: '4K',
-      SUPER: '超清',
-      HIGH: '高清',
-      NORMAL: '流畅',
-      LOW: '低清',
-    };
-    if (Array.isArray(data?.data?.video_list)) {
-      for (const video of data.data.video_list) {
-        const resolution = video?.video_info?.resoultion;
-        const playUrl = video?.video_info?.url;
-        const priority = Number(video?.video_info?.width || 0);
-        if (resolution && playUrl) {
-          urls.push({
-            name: nameMap[String(resolution)] || String(resolution),
-            url: String(playUrl),
-            priority,
-          });
-        }
-      }
-    }
-  } catch {
-    // ignore transcoding failure
+  } catch (error) {
+    console.warn('[quark] download url fetch failed:', error instanceof Error ? error.message : error);
   }
 
   const deduped = urls.filter((item, index, array) => array.findIndex((v) => v.url === item.url) === index);
