@@ -3852,6 +3852,8 @@ const NetDiskConfigComponent = ({
   const [enabled, setEnabled] = useState(false);
   const [cookie, setCookie] = useState('');
   const [savePath, setSavePath] = useState('/');
+  const [tvRefreshToken, setTvRefreshToken] = useState('');
+  const [tvDeviceId, setTvDeviceId] = useState('');
   const [mobileEnabled, setMobileEnabled] = useState(false);
   const [mobileAuthorization, setMobileAuthorization] = useState('');
   const [baiduEnabled, setBaiduEnabled] = useState(false);
@@ -3875,6 +3877,8 @@ const NetDiskConfigComponent = ({
     setEnabled(quark?.Enabled || false);
     setCookie(quark?.Cookie || '');
     setSavePath(quark?.SavePath || '/');
+    setTvRefreshToken(quark?.TvRefreshToken || '');
+    setTvDeviceId(quark?.TvDeviceId || '');
     setMobileEnabled(mobile?.Enabled || false);
     setMobileAuthorization(mobile?.Authorization || '');
     setBaiduEnabled(config?.NetDiskConfig?.Baidu?.Enabled || false);
@@ -3904,6 +3908,8 @@ const NetDiskConfigComponent = ({
             Enabled: enabled,
             Cookie: cookie,
             SavePath: savePath,
+            TvRefreshToken: tvRefreshToken,
+            TvDeviceId: tvDeviceId,
           },
           Mobile: {
             Enabled: mobileEnabled,
@@ -4220,6 +4226,40 @@ const NetDiskConfigComponent = ({
               placeholder='/影视/正式转存'
               className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
             />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              TV Refresh Token
+            </label>
+            <input
+              type='text'
+              value={tvRefreshToken}
+              onChange={(e) => setTvRefreshToken(e.target.value)}
+              disabled={!enabled}
+              placeholder='夸克 TV 刷新令牌（可选，用于获取流式播放地址）'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+            <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+              用于获取夸克 TV 流式播放地址，提升播放体验
+            </p>
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              TV Device ID
+            </label>
+            <input
+              type='text'
+              value={tvDeviceId}
+              onChange={(e) => setTvDeviceId(e.target.value)}
+              disabled={!enabled}
+              placeholder='夸克 TV 设备 ID（可选）'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+            <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+              设备标识，不填则自动生成
+            </p>
           </div>
 
           <div className='flex gap-3'>
