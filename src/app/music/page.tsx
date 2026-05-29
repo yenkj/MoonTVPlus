@@ -15,7 +15,17 @@ const SPECTRUM_REFERENCE_VOLUME = 10;
 const SPECTRUM_MIN_VOLUME = 5;
 const SPECTRUM_MAX_REFERENCE_VOLUME = 15;
 
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return fallback;
+}
+
 type MusicSource = 'wy' | 'tx' | 'kw' | 'kg' | 'mg';
+type MusicQuality = '128k' | '320k' | 'flac' | 'flac24bit';
 
 interface Song {
   id: string;
@@ -183,6 +193,74 @@ function AudioSpectrumCanvas({
   );
 }
 
+
+const VINYL_NEEDLE_SVG = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 130"><path d="M21,21 C21,65 86,70 86,100" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="6" stroke-linecap="round"/><path d="M20,20 C20,65 85,70 85,100" fill="none" stroke="%23e0e0e0" stroke-width="4.5" stroke-linecap="round"/><path d="M19,20 C19,65 84,70 84,100" fill="none" stroke="%23fff" stroke-width="1.5" stroke-linecap="round"/><g transform="translate(85, 100) rotate(25)"><rect x="-6" y="0" width="12" height="18" rx="2" fill="%23ccc"/><rect x="-4" y="5" width="8" height="14" rx="1" fill="%23333"/><rect x="-2" y="16" width="4" height="5" rx="1" fill="%23d43c33"/></g><circle cx="20" cy="20" r="10" fill="%23f0f0f0" stroke="%23ccc" stroke-width="1"/><circle cx="20" cy="20" r="4" fill="%23fff"/><circle cx="20" cy="20" r="1.5" fill="%23999"/></svg>')`;
+
+function VinylTurntable({
+  cover,
+  title,
+  isPlaying,
+  className = '',
+}: {
+  cover?: string;
+  title: string;
+  isPlaying: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`relative mx-auto mt-12 mb-5 flex h-[280px] w-[280px] items-center justify-center md:mt-16 md:mb-8 md:h-[340px] md:w-[340px] ${className}`}
+      aria-label="黑胶唱片机封面"
+    >
+      <div
+        className="pointer-events-none absolute left-1/2 top-[-54px] z-20 h-[140px] w-[108px] drop-shadow-xl transition-transform duration-500"
+        style={{
+          marginLeft: '-20px',
+          backgroundImage: VINYL_NEEDLE_SVG,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
+          transformOrigin: '20px 20px',
+          transform: isPlaying ? 'rotate(0deg)' : 'rotate(-30deg)',
+        }}
+      />
+      <div
+        className="relative flex h-[246px] w-[246px] items-center justify-center overflow-hidden rounded-full md:h-[300px] md:w-[300px]"
+        style={{
+          background: 'conic-gradient(from 45deg, #070707 0%, #2b2b2b 10%, #101010 20%, #080808 32%, #242424 42%, #0b0b0b 55%, #1e1e1e 68%, #050505 80%, #2c2c2c 90%, #070707 100%)',
+          boxShadow: '0 0 0 8px rgba(255,255,255,0.055), 0 20px 42px rgba(0,0,0,0.65), inset 0 0 28px rgba(255,255,255,0.045)',
+          animation: 'vinyl-spin 20s linear infinite',
+          animationPlayState: isPlaying ? 'running' : 'paused',
+        }}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full"
+          style={{
+            background: 'repeating-radial-gradient(circle, transparent 0, transparent 3px, rgba(255,255,255,0.055) 3px, rgba(255,255,255,0.055) 4px)',
+          }}
+        />
+        <div className="pointer-events-none absolute left-[18%] top-[10%] h-[42%] w-[22%] rotate-[-28deg] rounded-full bg-white/10 blur-md" />
+        <div className="relative z-10 flex h-[158px] w-[158px] items-center justify-center overflow-hidden rounded-full border-[5px] border-black bg-zinc-800 md:h-[192px] md:w-[192px]">
+          {cover ? (
+            <img
+              src={cover}
+              alt={title}
+              className="h-full w-full rounded-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : (
+            <svg className="h-14 w-14 text-zinc-500 md:h-16 md:w-16" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
+            </svg>
+          )}
+        </div>
+        <div className="pointer-events-none absolute z-20 h-3 w-3 rounded-full border border-white/30 bg-zinc-950" />
+      </div>
+    </div>
+  );
+}
+
 // 扩展 Window 接口以支持 Document PiP API
 declare global {
   interface Window {
@@ -201,17 +279,22 @@ export default function MusicPage() {
   const [currentView, setCurrentView] = useState<'playlists' | 'songs' | 'myPlaylists'>('playlists');
   const [currentPlaylistTitle, setCurrentPlaylistTitle] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [activeSearchKeyword, setActiveSearchKeyword] = useState('');
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [loadingMoreSearch, setLoadingMoreSearch] = useState(false);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
-  const [quality, setQuality] = useState<'128k' | '320k' | 'flac' | 'flac24bit'>('320k');
+  const [quality, setQuality] = useState<MusicQuality>('320k');
   const [playMode, setPlayMode] = useState<'loop' | 'single' | 'random'>('loop');
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [showPlayer, setShowPlayer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
+  const [mobileLyricsView, setMobileLyricsView] = useState<'lyrics' | 'vinyl'>('lyrics');
   const [musicProxyEnabled, setMusicProxyEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     return (window as any).RUNTIME_CONFIG?.MUSIC_PROXY_ENABLED !== false;
@@ -277,6 +360,7 @@ export default function MusicPage() {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const searchLoadMoreRef = useRef<HTMLDivElement>(null);
   const lastSaveTimeRef = useRef<number>(0);
   const restoredTimeRef = useRef<number>(0);
   const songStartTimeRef = useRef<number>(0); // 歌曲开始播放的时间戳
@@ -288,6 +372,9 @@ export default function MusicPage() {
   const currentTimeRef = useRef(0);
   const volumeRef = useRef(volume);
   const spectrumSeedRef = useRef(Math.random() * Math.PI * 2);
+  const qualitySwitchRequestRef = useRef(0);
+  const currentSongRef = useRef<Song | null>(null);
+  const currentSourceRef = useRef(currentSource);
 
   const mapSong = (song: any): Song => ({
     id: song.songId || song.id,
@@ -325,7 +412,7 @@ export default function MusicPage() {
     { key: 'mg', label: '咪咕' },
   ];
 
-  const buildStreamUrl = (song: Song, source: MusicSource, songQuality: '128k' | '320k' | 'flac' | 'flac24bit') => {
+  const buildStreamUrl = (song: Song, source: MusicSource, songQuality: MusicQuality) => {
     const params = new URLSearchParams({
       songId: song.id,
       source,
@@ -348,7 +435,7 @@ export default function MusicPage() {
   const fetchPlayData = async (
     song: Song,
     source: MusicSource,
-    songQuality: '128k' | '320k' | 'flac' | 'flac24bit',
+    songQuality: MusicQuality,
     includeUrl = false
   ) => {
     const response = await fetch('/api/music/v2/play', {
@@ -387,7 +474,8 @@ export default function MusicPage() {
     song: Song,
     playTime: number,
     totalDuration: number,
-    lastPlayedAt = Date.now()
+    lastPlayedAt = Date.now(),
+    recordQuality: MusicQuality = quality
   ) => {
     await fetch('/api/music/v2/history', {
       method: 'POST',
@@ -406,7 +494,8 @@ export default function MusicPage() {
         },
         playProgressSec: playTime,
         lastPlayedAt,
-        lastQuality: quality,
+        lastQuality: recordQuality,
+        createdAt: record.timestamp,
       }),
     });
   };
@@ -416,9 +505,10 @@ export default function MusicPage() {
     song: Song,
     playTime = 0,
     totalDuration = 0,
-    lastPlayedAt?: number
+    lastPlayedAt?: number,
+    recordQuality?: MusicQuality
   ) => {
-    saveHistoryRecord(record, song, playTime, totalDuration, lastPlayedAt).catch(err => {
+    saveHistoryRecord(record, song, playTime, totalDuration, lastPlayedAt, recordQuality).catch(err => {
       console.error('保存播放记录到数据库失败:', err);
     });
   };
@@ -645,6 +735,14 @@ export default function MusicPage() {
     }
   }, [currentSong, currentSongIndex, songs, currentPlaylistTitle, currentSource, currentView, quality, playMode, volume, currentSongUrl, lyrics, playRecords, playlistIndex]);
 
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+
+  useEffect(() => {
+    currentSourceRef.current = currentSource;
+  }, [currentSource]);
+
   // 监听 playRecords 变化，更新 playlistIndex
   useEffect(() => {
     if (pendingSongToPlay) {
@@ -701,6 +799,9 @@ export default function MusicPage() {
       const data = await response.json();
       setSongs((data.data?.list || []).map(mapSong));
       setCurrentPlaylistTitle(playlistName);
+      setActiveSearchKeyword('');
+      setSearchPage(1);
+      setSearchHasMore(false);
       setCurrentView('songs');
     } catch (error) {
       console.error('加载歌单失败:', error);
@@ -743,6 +844,7 @@ export default function MusicPage() {
         lastPlayedAt: baseTime + i,
         playCount: 1,
         lastQuality: quality,
+        createdAt: baseTime + i,
       }));
 
       await fetch('/api/music/v2/history', {
@@ -783,22 +885,65 @@ export default function MusicPage() {
 
   // 搜索歌曲
   const searchSongs = async () => {
-    if (!searchKeyword.trim()) return;
+    const keyword = searchKeyword.trim();
+    if (!keyword) return;
 
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/music/v2/search?source=${currentSource}&q=${encodeURIComponent(searchKeyword)}&page=1&limit=20`
+        `/api/music/v2/search?source=${currentSource}&q=${encodeURIComponent(keyword)}&page=1&limit=20`
       );
       const data = await response.json();
       setSongs((data.data?.list || []).map(mapSong));
-      setCurrentPlaylistTitle(`搜索: ${searchKeyword}`);
+      setActiveSearchKeyword(keyword);
+      setSearchPage(1);
+      setSearchHasMore(Boolean(data.data?.hasMore));
+      setCurrentPlaylistTitle(`搜索: ${keyword}`);
       setCurrentView('songs');
     } catch (error) {
       console.error('搜索失败:', error);
       setSongs([]);
+      setActiveSearchKeyword('');
+      setSearchPage(1);
+      setSearchHasMore(false);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreSearchSongs = async () => {
+    const keyword = activeSearchKeyword.trim();
+    if (!keyword || loadingMoreSearch || !searchHasMore) return;
+
+    const nextPage = searchPage + 1;
+    setLoadingMoreSearch(true);
+    try {
+      const response = await fetch(
+        `/api/music/v2/search?source=${currentSource}&q=${encodeURIComponent(keyword)}&page=${nextPage}&limit=20`
+      );
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const nextSongs = (data.data?.list || []).map(mapSong);
+        setSongs((prev) => [...prev, ...nextSongs]);
+        setSearchPage(nextPage);
+        setSearchHasMore(Boolean(data.data?.hasMore));
+      } else {
+        setToast({
+          message: data.error?.message || '加载更多失败',
+          type: 'error',
+          onClose: () => setToast(null),
+        });
+      }
+    } catch (error) {
+      console.error('加载更多搜索结果失败:', error);
+      setToast({
+        message: '加载更多失败',
+        type: 'error',
+        onClose: () => setToast(null),
+      });
+    } finally {
+      setLoadingMoreSearch(false);
     }
   };
 
@@ -930,6 +1075,7 @@ export default function MusicPage() {
         lastPlayedAt: baseTime + i,
         playCount: 1,
         lastQuality: quality,
+        createdAt: baseTime + i,
       }));
 
       // 一次性批量添加所有歌曲
@@ -1027,7 +1173,7 @@ export default function MusicPage() {
           } else {
             const data = await response.json();
             setToast({
-              message: data.error || '删除失败',
+              message: getApiErrorMessage(data.error, '删除失败'),
               type: 'error',
               onClose: () => setToast(null),
             });
@@ -1080,7 +1226,7 @@ export default function MusicPage() {
           } else {
             const data = await response.json();
             setToast({
-              message: data.error || '移除失败',
+              message: getApiErrorMessage(data.error, '移除失败'),
               type: 'error',
               onClose: () => setToast(null),
             });
@@ -1131,8 +1277,10 @@ export default function MusicPage() {
       setShowPlayer(true);
       setLyrics([]); // 清空旧歌词
 
-      // 添加到播放记录和播放列表
-      const record: PlayRecord = {
+      // 添加到播放记录和播放列表。timestamp 表示入队时间，不能在再次播放时刷新，
+      // 否则会破坏按 createdAt/timestamp 维护的播放队列顺序。
+      const existingRecord = playRecords.find(r => r.platform === platform && r.id === song.id);
+      const record: PlayRecord = existingRecord || {
         platform: platform,
         id: song.id,
         playTime: 0, // 初始播放时间
@@ -1146,11 +1294,11 @@ export default function MusicPage() {
       setPlayRecords(prev => {
         const existingIndex = prev.findIndex(r => r.platform === record.platform && r.id === record.id);
         if (existingIndex >= 0) {
-          // 记录已存在，更新时间戳但不重置播放时间
+          // 记录已存在：保持原位置和原 timestamp，只补齐可能变化的时长信息。
           const updated = [...prev];
           updated[existingIndex] = {
             ...updated[existingIndex],
-            timestamp: Date.now(),
+            duration: updated[existingIndex].duration || song.duration || 0,
           };
           return updated;
         } else {
@@ -1344,11 +1492,154 @@ export default function MusicPage() {
   };
 
   // 切换音质
+  const handleQualityChange = async (nextQuality: MusicQuality) => {
+    setShowQualityMenu(false);
+
+    if (nextQuality === quality) return;
+
+    const targetSong = currentSong;
+    const audio = audioRef.current;
+    const targetPlatform = targetSong?.platform || currentSource;
+
+    currentSongRef.current = targetSong;
+    currentSourceRef.current = currentSource;
+
+    setQuality(nextQuality);
+
+    // 没有正在播放的歌曲时，仅保存偏好；下次播放会使用新音质。
+    if (!targetSong || !audio) return;
+
+    const requestId = ++qualitySwitchRequestRef.current;
+    const targetSongKey = `${targetPlatform}:${targetSong.id}`;
+    const resumeTime = Number.isFinite(audio.currentTime) ? audio.currentTime : currentTimeRef.current;
+    const shouldResume = isPlaying || (!audio.paused && !audio.ended);
+
+    const isStillTargetSong = () => {
+      const activeSong = currentSongRef.current;
+      if (!activeSong) return false;
+
+      const activePlatform = activeSong.platform || currentSourceRef.current;
+      return (
+        requestId === qualitySwitchRequestRef.current &&
+        `${activePlatform}:${activeSong.id}` === targetSongKey
+      );
+    };
+
+    beginResolving();
+    try {
+      const proxyEnabled = getMusicProxyEnabled();
+      setMusicProxyEnabled(proxyEnabled);
+
+      let nextSongUrl = '';
+
+      if (proxyEnabled) {
+        nextSongUrl = buildStreamUrl(targetSong, targetPlatform, nextQuality);
+      } else {
+        const data = await fetchPlayData(targetSong, targetPlatform, nextQuality, true);
+        if (!isStillTargetSong()) return;
+
+        if (!data.success || !data.data?.play?.directUrl) {
+          throw new Error(data.error?.message || '获取播放地址失败');
+        }
+
+        nextSongUrl = data.data.play.directUrl;
+
+        if (data.data.song?.cover) {
+          setCurrentSong({
+            ...targetSong,
+            pic: data.data.song.cover,
+            platform: targetPlatform,
+          });
+        }
+
+        if (data.data.lyric?.lyric) {
+          const parsedLyrics = parseLyric(data.data.lyric.lyric, data.data.lyric.tlyric);
+          setLyrics(parsedLyrics);
+        }
+      }
+
+      if (!isStillTargetSong()) return;
+
+      const activeRecord =
+        playRecords[playlistIndex]?.platform === targetPlatform && playRecords[playlistIndex]?.id === targetSong.id
+          ? playRecords[playlistIndex]
+          : playRecords.find((record) => record.platform === targetPlatform && record.id === targetSong.id);
+      const totalDuration =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : duration || targetSong.duration || 0;
+
+      if (activeRecord) {
+        saveHistoryRecordSafely(
+          activeRecord,
+          { ...targetSong, platform: targetPlatform },
+          resumeTime,
+          totalDuration,
+          Date.now(),
+          nextQuality
+        );
+      }
+
+      setCurrentSongUrl(nextSongUrl);
+      setCurrentTime(resumeTime);
+      songStartTimeRef.current = Date.now();
+      restoredTimeRef.current = resumeTime;
+
+      const resumeAfterMetadata = () => {
+        if (!isStillTargetSong()) return;
+
+        if (resumeTime > 0) {
+          try {
+            const maxSeekTime =
+              Number.isFinite(audio.duration) && audio.duration > 0
+                ? Math.max(0, audio.duration - 0.25)
+                : resumeTime;
+            const seekTime = Math.min(resumeTime, maxSeekTime);
+
+            if (Math.abs(audio.currentTime - seekTime) > 1) {
+              audio.currentTime = seekTime;
+            }
+          } catch (error) {
+            console.warn('切换音质后恢复播放进度失败:', error);
+          }
+        }
+
+        setCurrentTime(audio.currentTime || resumeTime);
+
+        if (shouldResume) {
+          audio.play()
+            .then(() => setIsPlaying(true))
+            .catch((error) => {
+              console.error('切换音质后播放失败:', error);
+              setIsPlaying(false);
+            });
+        } else {
+          setIsPlaying(false);
+        }
+      };
+
+      audio.pause();
+      audio.src = nextSongUrl;
+      audio.addEventListener('loadedmetadata', resumeAfterMetadata, { once: true });
+      audio.load();
+      setIsPlaying(shouldResume);
+    } catch (error) {
+      console.error('切换音质失败:', error);
+      setToast({
+        message: (error as Error).message || '切换音质失败',
+        type: 'error',
+        onClose: () => setToast(null),
+      });
+    } finally {
+      endResolving();
+    }
+  };
+
   const cycleQuality = () => {
-    const qualities: Array<'128k' | '320k' | 'flac' | 'flac24bit'> = ['128k', '320k', 'flac', 'flac24bit'];
+    const qualities: MusicQuality[] = ['128k', '320k', 'flac', 'flac24bit'];
     const currentIndex = qualities.indexOf(quality);
     const nextIndex = (currentIndex + 1) % qualities.length;
-    setQuality(qualities[nextIndex]);
+    void handleQualityChange(qualities[nextIndex]);
   };
 
   // 清空播放记录
@@ -1411,6 +1702,9 @@ export default function MusicPage() {
     if (currentView === 'songs') {
       setCurrentView('playlists');
       setSongs([]);
+      setActiveSearchKeyword('');
+      setSearchPage(1);
+      setSearchHasMore(false);
     } else if (currentView === 'myPlaylists') {
       setCurrentView('playlists');
       setSelectedUserPlaylist(null);
@@ -1439,6 +1733,9 @@ export default function MusicPage() {
     setCurrentView('playlists');
     setSongs([]);
     setSearchKeyword('');
+    setActiveSearchKeyword('');
+    setSearchPage(1);
+    setSearchHasMore(false);
   };
 
   // 音频事件监听
@@ -1562,7 +1859,7 @@ export default function MusicPage() {
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [playMode, songs, currentSongIndex, lyrics, currentSong, playlistIndex, playRecords]);
+  }, [playMode, songs, currentSongIndex, lyrics, currentSong, playlistIndex, playRecords, quality]);
 
   // 初始加载
   useEffect(() => {
@@ -1596,6 +1893,27 @@ export default function MusicPage() {
       searchSongs();
     }
   };
+
+  useEffect(() => {
+    const sentinel = searchLoadMoreRef.current;
+    if (!sentinel || !activeSearchKeyword || !searchHasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMoreSearchSongs();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '240px 0px 240px 0px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeSearchKeyword, searchHasMore, loadingMoreSearch, searchPage]);
 
   // 进度条拖动
   const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1845,7 +2163,99 @@ export default function MusicPage() {
   return (
     <div className="music-theme min-h-screen bg-zinc-950 text-white">
       <>
-      <style jsx>{`
+      <style jsx global>{`
+        @keyframes vinyl-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .vinyl-player {
+          position: relative;
+          width: min(72vw, 300px);
+          height: min(72vw, 300px);
+          margin: 42px auto 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        @media (min-width: 768px) {
+          .vinyl-player {
+            width: clamp(260px, 30vw, 360px);
+            height: clamp(260px, 30vw, 360px);
+            margin: 54px auto 28px;
+          }
+        }
+        .vinyl-needle {
+          position: absolute;
+          top: -50px;
+          left: 50%;
+          margin-left: -20px;
+          width: 108px;
+          height: 140px;
+          background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 130"><path d="M21,21 C21,65 86,70 86,100" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="6" stroke-linecap="round"/><path d="M20,20 C20,65 85,70 85,100" fill="none" stroke="%23e0e0e0" stroke-width="4.5" stroke-linecap="round"/><path d="M19,20 C19,65 84,70 84,100" fill="none" stroke="%23fff" stroke-width="1.5" stroke-linecap="round"/><g transform="translate(85, 100) rotate(25)"><rect x="-6" y="0" width="12" height="18" rx="2" fill="%23ccc"/><rect x="-4" y="5" width="8" height="14" rx="1" fill="%23333"/><rect x="-2" y="16" width="4" height="5" rx="1" fill="%23d43c33"/></g><circle cx="20" cy="20" r="10" fill="%23f0f0f0" stroke="%23ccc" stroke-width="1"/><circle cx="20" cy="20" r="4" fill="%23fff"/><circle cx="20" cy="20" r="1.5" fill="%23999"/></svg>');
+          background-repeat: no-repeat;
+          background-size: contain;
+          transform-origin: 20px 20px;
+          transform: rotate(-30deg);
+          transition: transform 0.5s cubic-bezier(0.3, 0, 0.1, 1);
+          z-index: 5;
+          pointer-events: none;
+          filter: drop-shadow(0 8px 8px rgba(0,0,0,0.35));
+        }
+        .vinyl-player.playing .vinyl-needle {
+          transform: rotate(0deg);
+        }
+        .vinyl-disc {
+          position: relative;
+          width: 88%;
+          height: 88%;
+          border-radius: 9999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: conic-gradient(from 45deg, #080808 0%, #2a2a2a 10%, #0f0f0f 20%, #111 40%, #303030 50%, #111 60%, #090909 80%, #2a2a2a 90%, #080808 100%);
+          box-shadow: 0 0 0 8px rgba(255,255,255,0.045), 0 18px 36px rgba(0,0,0,0.55), inset 0 0 24px rgba(255,255,255,0.04);
+          animation: vinyl-spin 20s linear infinite;
+          animation-play-state: paused;
+        }
+        .vinyl-player.playing .vinyl-disc {
+          animation-play-state: running;
+        }
+        .vinyl-disc::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background: repeating-radial-gradient(transparent 0, transparent 3px, rgba(255,255,255,0.045) 3px, rgba(255,255,255,0.045) 4px), radial-gradient(circle at 35% 25%, rgba(255,255,255,0.14), transparent 28%);
+          pointer-events: none;
+        }
+        .vinyl-disc::after {
+          content: '';
+          position: absolute;
+          width: 12px;
+          height: 12px;
+          border-radius: 9999px;
+          background: #111;
+          border: 2px solid rgba(255,255,255,0.25);
+          z-index: 3;
+          pointer-events: none;
+        }
+        .vinyl-cover {
+          position: relative;
+          z-index: 2;
+          width: 64%;
+          height: 64%;
+          border-radius: 9999px;
+          object-fit: cover;
+          border: 5px solid #0a0a0a;
+          user-select: none;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+        }
+        .vinyl-cover-fallback {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #27272a;
+        }
         @keyframes music-note-bounce {
           0%,
           100% {
@@ -2117,9 +2527,25 @@ export default function MusicPage() {
                   </div>
                 ))}
               </div>
+              {activeSearchKeyword && (
+                <div ref={searchLoadMoreRef} className="mt-6 flex min-h-10 justify-center">
+                  {searchHasMore ? (
+                    loadingMoreSearch ? (
+                      <div className="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5">
+                        <MusicLoadingIndicator size="sm" className="gap-2 text-white" />
+                      </div>
+                    ) : (
+                      <div className="text-xs text-zinc-500">
+                        继续向下滚动加载更多
+                      </div>
+                    )
+                  ) : songs.length > 0 ? (
+                    <div className="text-xs text-zinc-500">没有更多搜索结果了</div>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
-
           {/* My Playlists View */}
           {currentView === 'myPlaylists' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2465,7 +2891,7 @@ export default function MusicPage() {
             </button>
             <div className="flex flex-1 min-h-0 flex-col md:flex-row">
               {/* Cover / Meta */}
-              <div className="relative h-32 md:h-auto md:w-[320px] lg:w-[360px] xl:w-[420px] bg-gradient-to-b from-zinc-800 to-zinc-900 shrink-0">
+              <div className="relative h-32 md:h-auto md:w-[380px] lg:w-[430px] xl:w-[480px] bg-gradient-to-b from-zinc-800 to-zinc-900 shrink-0 overflow-hidden">
                 {currentSong.pic && (
                   <div className="absolute inset-0">
                     <img
@@ -2476,7 +2902,13 @@ export default function MusicPage() {
                   </div>
                 )}
                 <div className="relative h-full flex flex-col items-center justify-center p-4 md:p-6 lg:p-8">
-                  <div className="w-16 h-16 md:w-40 md:h-40 lg:w-56 lg:h-56 rounded-xl lg:rounded-2xl overflow-hidden shadow-2xl mb-2 md:mb-4 lg:mb-6">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMobileLyricsView((view) => (view === 'lyrics' ? 'vinyl' : 'lyrics'));
+                    }}
+                    className="w-16 h-16 md:hidden rounded-xl overflow-hidden shadow-2xl mb-2"
+                  >
                     {currentSong.pic ? (
                       <img
                         src={currentSong.pic}
@@ -2485,19 +2917,39 @@ export default function MusicPage() {
                       />
                     ) : (
                       <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-                        <svg className="w-8 h-8 md:w-16 md:h-16 lg:w-20 lg:h-20 text-zinc-600" fill="currentColor" viewBox="0 0 20 20">
+                        <svg className="w-8 h-8 text-zinc-600" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
                         </svg>
                       </div>
                     )}
                   </div>
-                  <h2 className="text-base md:text-lg lg:text-2xl font-bold text-white text-center mb-1 line-clamp-2">{currentSong.name}</h2>
+                  <div className="hidden md:block w-full">
+                    <VinylTurntable cover={currentSong.pic} title={currentSong.name} isPlaying={isPlaying} />
+                  </div>
+                  <h2 className="text-base md:text-xl lg:text-2xl font-bold text-white text-center mb-1 line-clamp-2">{currentSong.name}</h2>
                   <p className="text-xs md:text-sm lg:text-base text-zinc-400 line-clamp-1 text-center">{currentSong.artist}</p>
                 </div>
               </div>
 
+              {mobileLyricsView === 'vinyl' && (
+                <div className="relative md:hidden flex-1 min-h-0 overflow-hidden bg-gradient-to-b from-zinc-800 to-zinc-900">
+                  {currentSong.pic && (
+                    <div className="absolute inset-0">
+                      <img
+                        src={currentSong.pic}
+                        alt={currentSong.name}
+                        className="w-full h-full object-cover opacity-30 blur-xl"
+                      />
+                    </div>
+                  )}
+                  <div className="relative h-full flex items-center justify-center p-4">
+                    <VinylTurntable cover={currentSong.pic} title={currentSong.name} isPlaying={isPlaying} />
+                  </div>
+                </div>
+              )}
+
               {/* Lyrics Content */}
-              <div ref={lyricsContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+              <div ref={lyricsContainerRef} className={`${mobileLyricsView === 'vinyl' ? 'hidden md:block' : 'block'} flex-1 overflow-y-auto p-4 md:p-6 lg:p-8`}>
                 {lyrics.length > 0 ? (
                   <div className="space-y-4 md:space-y-5">
                     {lyrics.map((line, index) => (
@@ -2901,8 +3353,7 @@ export default function MusicPage() {
             <div className="p-4 space-y-2">
               <button
                 onClick={() => {
-                  setQuality('128k');
-                  setShowQualityMenu(false);
+                  void handleQualityChange('128k');
                 }}
                 className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
                   quality === '128k'
@@ -2926,8 +3377,7 @@ export default function MusicPage() {
 
               <button
                 onClick={() => {
-                  setQuality('320k');
-                  setShowQualityMenu(false);
+                  void handleQualityChange('320k');
                 }}
                 className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
                   quality === '320k'
@@ -2951,8 +3401,7 @@ export default function MusicPage() {
 
               <button
                 onClick={() => {
-                  setQuality('flac');
-                  setShowQualityMenu(false);
+                  void handleQualityChange('flac');
                 }}
                 className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
                   quality === 'flac'
@@ -2976,8 +3425,7 @@ export default function MusicPage() {
 
               <button
                 onClick={() => {
-                  setQuality('flac24bit');
-                  setShowQualityMenu(false);
+                  void handleQualityChange('flac24bit');
                 }}
                 className={`w-full p-4 rounded-lg flex items-center justify-between transition-colors ${
                   quality === 'flac24bit'

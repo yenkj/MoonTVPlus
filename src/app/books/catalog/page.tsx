@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import BookCard from '@/components/books/BookCard';
 import { buildBookDetailPath, cacheBookListItem } from '@/lib/book-route-cache.client';
@@ -20,13 +20,9 @@ function CatalogSkeleton() {
           <div key={index} className='h-10 w-24 rounded-full bg-gray-200 dark:bg-gray-800' />
         ))}
       </div>
-      <div className='rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950'>
-        <div className='h-6 w-40 rounded bg-gray-200 dark:bg-gray-800' />
-        <div className='mt-3 h-4 w-72 rounded bg-gray-200 dark:bg-gray-800' />
-      </div>
-      <div className='flex gap-3 overflow-x-auto pb-2'>
+      <div className='flex gap-2 overflow-x-auto pb-1'>
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className='h-20 min-w-[180px] rounded-2xl bg-gray-200 dark:bg-gray-800' />
+          <div key={index} className='h-10 w-28 shrink-0 rounded-full bg-gray-200 dark:bg-gray-800' />
         ))}
       </div>
       <div className='grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6'>
@@ -62,25 +58,85 @@ function isMeaningfulNavTitle(title?: string) {
 }
 
 export default function BooksCatalogPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const sourceId = searchParams.get('sourceId') || '';
   const href = searchParams.get('href') || '';
   const [sources, setSources] = useState<BookSource[]>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState(sourceId);
+  const [selectedHref, setSelectedHref] = useState(href);
   const [data, setData] = useState<BookCatalogResult | null>(null);
+  const [catalogNavigation, setCatalogNavigation] = useState<BookCatalogResult['navigation']>([]);
   const [entries, setEntries] = useState<BookListItem[]>([]);
   const [nextHref, setNextHref] = useState<string | undefined>(undefined);
   const [error, setError] = useState('');
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const loaderRef = useRef<HTMLDivElement | null>(null);
+  const sourceScrollerRef = useRef<HTMLDivElement | null>(null);
+  const activeSourceItemRef = useRef<HTMLAnchorElement | null>(null);
   const navScrollerRef = useRef<HTMLDivElement | null>(null);
+  const activeNavItemRef = useRef<HTMLAnchorElement | null>(null);
   const loadedPageHrefsRef = useRef<Set<string>>(new Set());
   const failedPageHrefsRef = useRef<Set<string>>(new Set());
+  const sourceDragStateRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean; pointerType: string } | null>(null);
+  const suppressSourceClickRef = useRef(false);
   const navDragStateRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean; pointerType: string } | null>(null);
   const suppressNavClickRef = useRef(false);
+
+  const showImmediateContentLoading = useCallback(() => {
+    setError('');
+    setLoadingCatalog(true);
+    setEntries([]);
+    setNextHref(undefined);
+  }, []);
 
   useEffect(() => {
     fetch('/api/books/sources').then((res) => res.json()).then((json) => setSources(json.sources || []));
   }, []);
+
+  useEffect(() => {
+    setSelectedSourceId(sourceId);
+    setSelectedHref(href);
+    setCatalogNavigation([]);
+  }, [sourceId]);
+
+  useEffect(() => {
+    setSelectedHref(href);
+  }, [href]);
+
+  useEffect(() => {
+    if (!sourceId || !href) return;
+    let cancelled = false;
+
+    const loadRootNavigation = async () => {
+      try {
+        const params = new URLSearchParams({ sourceId });
+        const res = await fetch(`/api/books/catalog?${params.toString()}`);
+        const json = await res.json();
+        if (!res.ok) return;
+        if (!cancelled) setCatalogNavigation((json as BookCatalogResult).navigation || []);
+      } catch {
+        // 当前分类内容仍可正常展示，根目录分类加载失败时忽略。
+      }
+    };
+
+    void loadRootNavigation();
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceId, href]);
+
+  useEffect(() => {
+    if (!sourceId || href || catalogNavigation.length === 0) return;
+    const firstNavigationItem = catalogNavigation.find((item) => {
+      const rel = (item.rel || '').toLowerCase();
+      return item.href && rel !== 'next' && rel !== 'previous' && isMeaningfulNavTitle(item.title);
+    });
+    if (!firstNavigationItem?.href) return;
+    setSelectedHref(firstNavigationItem.href);
+    router.replace(`/books/catalog?sourceId=${encodeURIComponent(sourceId)}&href=${encodeURIComponent(firstNavigationItem.href)}`);
+  }, [catalogNavigation, href, router, sourceId]);
 
   const mergeEntries = useCallback((prev: BookListItem[], next: BookListItem[]) => {
     const seen = new Set(prev.map((item) => `${item.sourceId}::${item.id}::${item.detailHref || item.acquisitionLinks[0]?.href || ''}`));
@@ -103,7 +159,8 @@ export default function BooksCatalogPage() {
       setLoadingMore(true);
     } else {
       setError('');
-      setData(null);
+      setLoadingCatalog(true);
+      if (!normalizedHref) setData(null);
       setEntries([]);
       setNextHref(undefined);
       loadedPageHrefsRef.current = new Set(normalizedHref ? [normalizedHref] : ['__root__']);
@@ -122,6 +179,7 @@ export default function BooksCatalogPage() {
         setEntries((prev) => mergeEntries(prev, nextData.entries || []));
       } else {
         setData(nextData);
+        setCatalogNavigation((prev) => normalizedHref ? (prev.length > 0 ? prev : nextData.navigation || []) : nextData.navigation || []);
         setEntries(nextData.entries || []);
       }
       setNextHref(nextData.nextHref || undefined);
@@ -133,6 +191,7 @@ export default function BooksCatalogPage() {
       }
       setError(err instanceof Error ? err.message : '获取目录失败');
     } finally {
+      if (!append) setLoadingCatalog(false);
       setLoadingMore(false);
     }
   }, [mergeEntries, sourceId]);
@@ -157,6 +216,64 @@ export default function BooksCatalogPage() {
     return () => observer.disconnect();
   }, [data, nextHref, loadingMore, loadCatalog]);
 
+  const handleSourcePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const node = sourceScrollerRef.current;
+    if (!node) return;
+    sourceDragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: node.scrollLeft,
+      moved: false,
+      pointerType: event.pointerType,
+    };
+    suppressSourceClickRef.current = false;
+    if (event.pointerType !== 'mouse') {
+      node.setPointerCapture?.(event.pointerId);
+    }
+  }, []);
+
+  const handleSourcePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const node = sourceScrollerRef.current;
+    const dragState = sourceDragStateRef.current;
+    if (!node || !dragState || dragState.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - dragState.startX;
+    const moveThreshold = dragState.pointerType === 'mouse' ? 8 : 4;
+    if (Math.abs(deltaX) > moveThreshold) {
+      dragState.moved = true;
+      suppressSourceClickRef.current = true;
+    }
+    node.scrollLeft = dragState.startScrollLeft - deltaX;
+  }, []);
+
+  const handleSourcePointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const node = sourceScrollerRef.current;
+    const dragState = sourceDragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    if (dragState.moved) {
+      event.preventDefault();
+      window.setTimeout(() => {
+        suppressSourceClickRef.current = false;
+      }, 0);
+    }
+    sourceDragStateRef.current = null;
+    if (dragState.pointerType !== 'mouse') {
+      node?.releasePointerCapture?.(event.pointerId);
+    }
+  }, []);
+
+  const handleSourcePointerLeave = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse') return;
+    handleSourcePointerUp(event);
+  }, [handleSourcePointerUp]);
+
+  const handleSourceWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    const node = sourceScrollerRef.current;
+    if (!node) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    node.scrollLeft += delta;
+  }, []);
 
   const handleNavPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -218,7 +335,7 @@ export default function BooksCatalogPage() {
   }, []);
 
   const navigationItems = useMemo(() => {
-    const items = (data?.navigation || []).filter((item) => {
+    const items = (catalogNavigation || []).filter((item) => {
       const rel = (item.rel || '').toLowerCase();
       if (rel === 'next' || rel === 'previous') return false;
       return isMeaningfulNavTitle(item.title);
@@ -231,61 +348,121 @@ export default function BooksCatalogPage() {
       seen.add(key);
       return true;
     });
-  }, [data]);
+  }, [catalogNavigation]);
+
+  useLayoutEffect(() => {
+    if (!selectedHref || navigationItems.length === 0) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const container = navScrollerRef.current;
+      const activeItem = activeNavItemRef.current;
+      if (!container || !activeItem) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = activeItem.getBoundingClientRect();
+      const targetLeft = container.scrollLeft + activeRect.left - containerRect.left - (container.clientWidth - activeItem.clientWidth) / 2;
+      container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [selectedHref, navigationItems]);
+
+  useLayoutEffect(() => {
+    if (!selectedSourceId || sources.length === 0) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const container = sourceScrollerRef.current;
+      const activeItem = activeSourceItemRef.current;
+      if (!container || !activeItem) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = activeItem.getBoundingClientRect();
+      const targetLeft = container.scrollLeft + activeRect.left - containerRect.left - (container.clientWidth - activeItem.clientWidth) / 2;
+      container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [selectedSourceId, sources.length]);
 
   return (
     <div className='space-y-6'>
-      <div className='flex flex-wrap gap-2'>
+      <div
+        ref={sourceScrollerRef}
+        className='flex flex-nowrap gap-2 overflow-x-auto pb-1 cursor-grab select-none touch-pan-x active:cursor-grabbing'
+        onPointerDown={handleSourcePointerDown}
+        onPointerMove={handleSourcePointerMove}
+        onPointerUp={handleSourcePointerUp}
+        onPointerCancel={handleSourcePointerUp}
+        onPointerLeave={handleSourcePointerLeave}
+        onWheel={handleSourceWheel}
+      >
         {sources.map((source) => (
-          <Link key={source.id} href={`/books/catalog?sourceId=${encodeURIComponent(source.id)}`} className={`rounded-full px-4 py-2 text-sm ${source.id === sourceId ? 'bg-sky-600 text-white' : 'border border-gray-200 dark:border-gray-700'}`}>
+          <Link
+            key={source.id}
+            ref={source.id === selectedSourceId ? activeSourceItemRef : undefined}
+            href={`/books/catalog?sourceId=${encodeURIComponent(source.id)}`}
+            draggable={false}
+            onDragStart={(event) => event.preventDefault()}
+            onClick={(event) => {
+              if (suppressSourceClickRef.current) {
+                event.preventDefault();
+                suppressSourceClickRef.current = false;
+                return;
+              }
+              setSelectedSourceId(source.id);
+              setSelectedHref('');
+              showImmediateContentLoading();
+            }}
+            className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm ${source.id === selectedSourceId ? 'bg-sky-600 text-white' : 'border border-gray-200 dark:border-gray-700'}`}
+          >
             {source.name}
           </Link>
         ))}
       </div>
       {error ? <div className='text-sm text-red-500'>{error}</div> : null}
-      {data ? (
+      {data || navigationItems.length > 0 ? (
         <>
-          <section className='rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950'>
-            <h1 className='text-lg font-semibold'>{data.title}</h1>
-            {data.subtitle ? <p className='mt-1 text-sm text-gray-500 dark:text-gray-400'>{data.subtitle}</p> : null}
-          </section>
           {navigationItems.length > 0 ? (
-            <section className='space-y-3'>
-              <div className='text-sm font-medium text-gray-700 dark:text-gray-300'>目录</div>
-              <div
-                ref={navScrollerRef}
-                className='flex gap-3 overflow-x-auto pb-2 cursor-grab select-none touch-pan-x active:cursor-grabbing'
-                 onPointerDown={handleNavPointerDown}
-                 onPointerMove={handleNavPointerMove}
-                 onPointerUp={handleNavPointerUp}
-                 onPointerCancel={handleNavPointerUp}
-                 onPointerLeave={handleNavPointerLeave}
-                 onWheel={handleNavWheel}
-               >
-                {navigationItems.map((item, index) => (
-                  <Link
-                     key={`${item.href}-${index}`}
-                     href={`/books/catalog?sourceId=${encodeURIComponent(sourceId)}&href=${encodeURIComponent(item.href)}`}
-                     draggable={false}
-                     onDragStart={(event) => event.preventDefault()}
-                     onClick={(event) => {
-                       if (suppressNavClickRef.current) {
-                         event.preventDefault();
-                         suppressNavClickRef.current = false;
-                       }
-                     }}
-                     className='min-w-[180px] rounded-2xl border border-gray-200 bg-white p-4 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-950'
-                   >
-                    <div className='line-clamp-2 font-medium'>{item.title.trim()}</div>
-                    <div className='mt-2 text-xs text-gray-500 dark:text-gray-400'>点击进入子目录</div>
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <div
+              ref={navScrollerRef}
+              className='flex flex-nowrap gap-2 overflow-x-auto pb-1 cursor-grab select-none touch-pan-x active:cursor-grabbing'
+              onPointerDown={handleNavPointerDown}
+              onPointerMove={handleNavPointerMove}
+              onPointerUp={handleNavPointerUp}
+              onPointerCancel={handleNavPointerUp}
+              onPointerLeave={handleNavPointerLeave}
+              onWheel={handleNavWheel}
+            >
+              {navigationItems.map((item, index) => (
+                <Link
+                  key={`${item.href}-${index}`}
+                  ref={item.href === selectedHref ? activeNavItemRef : undefined}
+                  href={`/books/catalog?sourceId=${encodeURIComponent(sourceId)}&href=${encodeURIComponent(item.href)}`}
+                  draggable={false}
+                  onDragStart={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    if (suppressNavClickRef.current) {
+                      event.preventDefault();
+                      suppressNavClickRef.current = false;
+                      return;
+                    }
+                    setSelectedHref(item.href);
+                    showImmediateContentLoading();
+                  }}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm ${item.href === selectedHref ? 'bg-sky-600 text-white' : 'border border-gray-200 dark:border-gray-700'}`}
+                >
+                  {item.title.trim()}
+                </Link>
+              ))}
+            </div>
           ) : null}
-          <section className='grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6'>
-            {entries.map((item) => <BookCard key={`${item.sourceId}-${item.id}-${item.detailHref || item.acquisitionLinks[0]?.href || ''}`} item={item} href={makeHref(sourceId, item)} onNavigate={() => cacheBookListItem(item)} />)}
-          </section>
+          {loadingCatalog ? (
+            <LoadingMoreSkeleton />
+          ) : (
+            <section className='grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6'>
+              {entries.map((item) => <BookCard key={`${item.sourceId}-${item.id}-${item.detailHref || item.acquisitionLinks[0]?.href || ''}`} item={item} href={makeHref(sourceId, item)} onNavigate={() => cacheBookListItem(item)} />)}
+            </section>
+          )}
           {loadingMore ? <LoadingMoreSkeleton /> : null}
           {!loadingMore && nextHref ? <div ref={loaderRef} className='h-8 w-full' /> : null}
         </>
