@@ -154,8 +154,6 @@ export interface AdminConfig {
       Enabled: boolean;
       Cookie: string;
       SavePath: string;
-      TvRefreshToken?: string;
-      TvDeviceId?: string;
     };
     Mobile?: {
       Enabled: boolean;
