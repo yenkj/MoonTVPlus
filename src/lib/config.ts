@@ -729,8 +729,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
         Enabled: false,
         Cookie: '',
         SavePath: '/',
-        TvRefreshToken: process.env.QUARK_TV_REFRESH_TOKEN || '',
-        TvDeviceId: process.env.QUARK_TV_DEVICE_ID || '',
       },
       Mobile: {
         Enabled: false,
@@ -768,16 +766,7 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       Enabled: false,
       Cookie: '',
       SavePath: '/',
-      TvRefreshToken: process.env.QUARK_TV_REFRESH_TOKEN || '',
-      TvDeviceId: process.env.QUARK_TV_DEVICE_ID || '',
     };
-  }
-
-  if (adminConfig.NetDiskConfig.Quark.TvRefreshToken === undefined) {
-    adminConfig.NetDiskConfig.Quark.TvRefreshToken = process.env.QUARK_TV_REFRESH_TOKEN || '';
-  }
-  if (adminConfig.NetDiskConfig.Quark.TvDeviceId === undefined) {
-    adminConfig.NetDiskConfig.Quark.TvDeviceId = process.env.QUARK_TV_DEVICE_ID || '';
   }
 
   if (!adminConfig.NetDiskConfig.Mobile) {
