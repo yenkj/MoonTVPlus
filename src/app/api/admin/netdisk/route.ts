@@ -79,8 +79,6 @@ export async function POST(request: NextRequest) {
         Enabled: Boolean(Quark?.Enabled),
         Cookie: normalizedCookie,
         SavePath: Quark?.SavePath || '/',
-        TvRefreshToken: Quark?.TvRefreshToken || '',
-        TvDeviceId: Quark?.TvDeviceId || '',
       };
       adminConfig.NetDiskConfig.Mobile = {
         Enabled: Boolean(Mobile?.Enabled),
