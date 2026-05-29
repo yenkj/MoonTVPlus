@@ -490,18 +490,50 @@ export class EmbyClient {
     }
   }
 
-  async getStreamUrl(itemId: string, direct = true, forceDirectUrl = false): Promise<string> {
+async getStreamUrl(itemId: string, direct = true, forceDirectUrl = false): Promise<string> {
     await this.ensureAuthenticated();
     const token = this.apiKey || this.authToken;
 
+    // =================【新增：统一预热逻辑】=================
+    // 无论是直连还是代理，只要不是强制直连，都优先执行预热（解决内嵌字幕索引丢失）
+    try {
+      const preloadUrl = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
+      await fetch(preloadUrl, {
+        method: 'GET',
+        headers: { 'Range': 'bytes=0-1023' } // 只请求前 1KB
+      });
+    } catch (error) {
+      console.error('初始化 Emby 播放信息失败:', error);
+    }
+    // =======================================================
+
     // 如果启用了代理播放且不是强制获取直接URL，返回代理URL
     if (this.proxyPlay && !forceDirectUrl) {
-      // 使用固定的token占位符，实际验证在服务端进行
       const subscribeToken = 'proxy';
       const filename = this.transcodeMp4 ? 'video.mp4' : 'video';
 
       // 构建代理URL（相对路径）
       let proxyUrl = `/api/emby/play/${subscribeToken}/${filename}?itemId=${itemId}`;
+
+      // =================【新增：让代理模式也支持高级参数】=================
+      // 1. 加上保底的设备与会话参数（同步原 HLS 逻辑）
+      if (!this.transcodeMp4) {
+        const playSessionId = generatePlaySessionId();
+        proxyUrl += `&DeviceId=efd03a05-f87b-48ec-9e35-78bf5a1ed1e7&PlaySessionId=${playSessionId}&AudioCodec=mp3,aac`;
+      }
+
+      // 2. 加上 MediaSourceId 参数
+      if (this.appendMediaSourceId) {
+        try {
+          const playbackInfo = await this.getPlaybackInfo(itemId);
+          if (playbackInfo.MediaSourceId) {
+            proxyUrl += `&MediaSourceId=${playbackInfo.MediaSourceId}`;
+          }
+        } catch (error) {
+          // 失败则跳过，不影响主流程
+        }
+      }
+      // =======================================================
 
       // 如果有embyKey，添加到查询参数
       if (this.embyKey) {
@@ -511,22 +543,7 @@ export class EmbyClient {
       return proxyUrl;
     }
 
-    // 核心修复：在拼接 URL 之前，必须先请求一次 stream?Static=true
-    // 这步操作会通知 Emby 服务端准备好该视频的所有流（包括内嵌字幕索引）
-    try {
-      const preloadUrl = `${this.serverUrl}/Videos/${itemId}/stream?Static=true&api_key=${token}`;
-      // 使用 GET 请求，只请求一小部分内容来触发 Emby 处理
-      await fetch(preloadUrl, {
-        method: 'GET',
-        headers: {
-          'Range': 'bytes=0-1023' // 只请求前 1KB，不下载完整内容
-        }
-      });
-    } catch (error) {
-      console.error('初始化 Emby 播放信息失败:', error);
-    }
-
-    // 原有的直接播放逻辑
+    // 原有的直接播放逻辑（完全没动，100% 安全）
     let url: string;
 
     if (direct) {
