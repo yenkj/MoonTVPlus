@@ -144,15 +144,6 @@ function ensureOk(data: any, fallbackMessage: string) {
   throw new Error(data?.message || data?.msg || fallbackMessage);
 }
 
-function summarizeQuarkUrlForLog(rawUrl: string) {
-  try {
-    const parsed = new URL(rawUrl);
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return '[invalid-url]';
-  }
-}
-
 export function parseQuarkShareUrl(url: string, passcode = ''): QuarkShareLinkInfo {
   const parsed = new URL(url);
   const pwdId =
@@ -743,11 +734,6 @@ export async function getQuarkPlayUrls(
   const headers = getHeaders(safeCookie);
   const urls: Array<{ name: string; url: string; priority: number }> = [];
 
-  console.log('[quark][play-urls] start', {
-    savedFileId,
-    playMode,
-  });
-
   try {
     const response = await fetch(buildApiUrl(QUARK_DRIVE_API_BASE, '/file/download'), {
       method: 'POST',
@@ -757,15 +743,6 @@ export async function getQuarkPlayUrls(
       }),
       cache: 'no-store',
     });
-    if (!response.ok) {
-      const body = await response.text();
-      console.warn('[quark][play-urls] original download request failed', {
-        savedFileId,
-        status: response.status,
-        body: body.slice(0, 200),
-      });
-      throw new Error(`获取夸克下载地址失败 (${response.status})`);
-    }
     const data = await parseJson(response);
     ensureOk(data, '获取夸克下载地址失败');
     const downloadUrl = data?.data?.[0]?.download_url;
@@ -774,14 +751,6 @@ export async function getQuarkPlayUrls(
         name: '原画',
         url: String(downloadUrl),
         priority: 9999,
-      });
-      console.log('[quark][play-urls] original download url found', {
-        savedFileId,
-        url: summarizeQuarkUrlForLog(String(downloadUrl)),
-      });
-    } else {
-      console.warn('[quark][play-urls] original download url missing', {
-        savedFileId,
       });
     }
   } catch (error) {
@@ -799,15 +768,6 @@ export async function getQuarkPlayUrls(
       }),
       cache: 'no-store',
     });
-    if (!response.ok) {
-      const body = await response.text();
-      console.warn('[quark][play-urls] transcoding request failed', {
-        savedFileId,
-        status: response.status,
-        body: body.slice(0, 200),
-      });
-      throw new Error(`获取夸克转码地址失败 (${response.status})`);
-    }
     const data = await parseJson(response);
     ensureOk(data, '获取夸克转码地址失败');
     const nameMap: Record<string, string> = {
@@ -830,11 +790,6 @@ export async function getQuarkPlayUrls(
           });
         }
       }
-      console.log('[quark][play-urls] transcoding urls parsed', {
-        savedFileId,
-        count: data.data.video_list.length,
-        parsedCount: urls.length,
-      });
     }
   } catch (error) {
     console.warn('[quark] get transcoding play url failed:', error);
@@ -850,19 +805,8 @@ export async function getQuarkPlayUrls(
   });
 
   if (deduped.length === 0) {
-    console.warn('[quark][play-urls] no playable urls', {
-      savedFileId,
-      playMode,
-    });
     throw new Error('未获取到夸克播放地址');
   }
-
-  console.log('[quark][play-urls] success', {
-    savedFileId,
-    playMode,
-    count: deduped.length,
-    names: deduped.map((item) => item.name),
-  });
 
   return deduped;
 }
@@ -896,22 +840,10 @@ export async function probeQuarkPlayRange(
     });
 
     if (!response.ok || !response.body) {
-      console.warn('[quark][probe] upstream rejected', {
-        url: summarizeQuarkUrlForLog(url),
-        range: range || '(none)',
-        status: response.status,
-        hasBody: Boolean(response.body),
-      });
       return null;
     }
 
     const window = parseContentRangeHeader(response.headers.get('content-range'));
-    console.log('[quark][probe] upstream accepted', {
-      url: summarizeQuarkUrlForLog(url),
-      range: range || '(none)',
-      status: response.status,
-      window,
-    });
     return { response, window };
   } finally {
     clearTimeout(timeoutId);
