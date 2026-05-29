@@ -164,16 +164,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '无效的 episodeIndex' }, { status: 400 });
     }
 
+    const requestTag = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const { session, cookie, savePath, playMode, multiThreadPlayback } = await resolveQuarkSession(id);
     const file = session.files[episodeIndex];
     if (!file) {
       return NextResponse.json({ error: '播放文件不存在' }, { status: 404 });
     }
 
+    console.log('[quark][proxy] start', {
+      requestTag,
+      id,
+      episodeIndex,
+      fileName: file.name,
+      fileSize: file.size,
+      playMode,
+      multiThreadPlayback,
+      range: request.headers.get('range') || '(none)',
+    });
+
     if (!session.playFolderFid || !session.playFolderPath) {
       const folder = await ensureQuarkPlayFolder(cookie, savePath, session.shareId, session.title);
       session.playFolderFid = folder.folderFid;
       session.playFolderPath = folder.folderPath;
+      console.log('[quark][proxy] play folder ready', {
+        requestTag,
+        folderFid: session.playFolderFid,
+        folderPath: session.playFolderPath,
+      });
     }
 
     let savedFileId = session.savedFileIds[file.fid];
@@ -188,6 +205,11 @@ export async function GET(request: NextRequest) {
         playFolderFid: session.playFolderFid,
       });
       session.savedFileIds[file.fid] = savedFileId;
+      console.log('[quark][proxy] file saved into play folder', {
+        requestTag,
+        fileName: file.name,
+        savedFileId,
+      });
     }
     refreshQuarkNetdiskSession(id);
 
@@ -204,6 +226,14 @@ export async function GET(request: NextRequest) {
         expiresAt: Date.now() + 5 * 60 * 1000,
       };
     }
+    console.log('[quark][proxy] play urls resolved', {
+      requestTag,
+      savedFileId,
+      playMode,
+      count: playUrls.length,
+      names: playUrls.map((item) => item.name),
+      cacheHit: Boolean(cachedPlayUrls && cachedPlayUrls.expiresAt > Date.now()),
+    });
     const selected = playUrls.find((item) => item.name === quality) || playUrls[0];
     const candidates = selected
       ? [
@@ -221,14 +251,26 @@ export async function GET(request: NextRequest) {
     for (const candidate of candidates) {
       for (const profile of buildHeaderProfiles(request, cookie)) {
         try {
+          console.log('[quark][proxy] probing candidate', {
+            requestTag,
+            candidate: candidate.name,
+            candidateUrl: new URL(candidate.url).origin + new URL(candidate.url).pathname,
+            profile: profile.name,
+          });
           const requestedRange = parseRequestedRange(range);
           const probeRange =
             multiThreadPlayback && requestedRange
               ? `bytes=${requestedRange.start}-${requestedRange.start}`
               : range || undefined;
-          const probed = await probeQuarkPlayRange(candidate.url, profile.headers, probeRange);
+          let probed = await probeQuarkPlayRange(candidate.url, profile.headers, probeRange);
           if (probed?.response.body) {
             if (multiThreadPlayback && requestedRange && probed.window) {
+              console.log('[quark][proxy] using multithread stream', {
+                requestTag,
+                candidate: candidate.name,
+                profile: profile.name,
+                window: probed.window,
+              });
               const trunkEnd = Math.min(
                 requestedRange.end ?? requestedRange.start + 8 * 1024 * 1024 - 1,
                 requestedRange.start + 8 * 1024 * 1024 - 1,
@@ -263,11 +305,25 @@ export async function GET(request: NextRequest) {
               });
             }
 
+            console.log('[quark][proxy] streaming upstream response', {
+              requestTag,
+              candidate: candidate.name,
+              profile: profile.name,
+              status: probed.response.status,
+              hasRange: Boolean(range),
+              contentRange: probed.response.headers.get('content-range') || '(none)',
+            });
             return pipeUpstream(probed.response, range);
           }
 
           lastStatus = probed?.response.status || lastStatus;
         } catch (error) {
+          console.warn('[quark][proxy] probe failed', {
+            requestTag,
+            candidate: candidate.name,
+            profile: profile.name,
+            error: error instanceof Error ? error.message : String(error),
+          });
           if (error instanceof Error && error.name === 'AbortError') {
             return NextResponse.json({ error: '夸克网盘代理超时' }, { status: 504 });
           }
@@ -275,11 +331,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.warn('[quark][proxy] all candidates failed', {
+      requestTag,
+      id,
+      episodeIndex,
+      fileName: file.name,
+      lastStatus,
+    });
     return NextResponse.json(
       { error: `夸克视频代理失败 (${lastStatus})` },
       { status: lastStatus }
     );
   } catch (error) {
+    console.error('[quark][proxy] fatal error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '夸克网盘代理失败' },
       { status: 500 }
