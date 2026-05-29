@@ -264,6 +264,7 @@ export async function GET(request: NextRequest) {
               : range || undefined;
           let probed = await probeQuarkPlayRange(candidate.url, profile.headers, probeRange);
           if (probed?.response.body) {
+            const response = probed.response;
             if (multiThreadPlayback && requestedRange && probed.window) {
               console.log('[quark][proxy] using multithread stream', {
                 requestTag,
@@ -284,7 +285,7 @@ export async function GET(request: NextRequest) {
               const responseHeaders = new Headers();
               const copyHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
               copyHeaders.forEach((name) => {
-                const value = probed.response.headers.get(name);
+                const value = response.headers.get(name);
                 if (value) responseHeaders.set(name, value);
               });
               responseHeaders.set('Cache-Control', 'private, no-store');
@@ -292,7 +293,7 @@ export async function GET(request: NextRequest) {
               responseHeaders.set('Content-Range', rangeHeaders['Content-Range']);
               responseHeaders.set('Content-Length', rangeHeaders['Content-Length']);
               try {
-                await probed.response.body.cancel();
+                await response.body.cancel();
               } catch {
                 void 0;
               }
