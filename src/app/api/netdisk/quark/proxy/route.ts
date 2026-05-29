@@ -293,7 +293,10 @@ export async function GET(request: NextRequest) {
               responseHeaders.set('Content-Range', rangeHeaders['Content-Range']);
               responseHeaders.set('Content-Length', rangeHeaders['Content-Length']);
               try {
-                await response.body.cancel();
+                const responseBody = response.body;
+                if (responseBody) {
+                  await responseBody.cancel();
+                }
               } catch {
                 void 0;
               }
