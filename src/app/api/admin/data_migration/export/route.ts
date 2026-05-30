@@ -153,10 +153,10 @@ export async function POST(req: NextRequest) {
               skipConfigs,
               musicV2History,
               musicV2Playlists: playlistsWithSongs,
-              passwordV2: finalPasswordV2,
               loginStats,
               ...(includeMangaData ? { mangaData: { shelf: mangaShelf, readRecords: mangaReadRecords } } : {}),
-              ...(includeBookData ? { bookData: { shelf: bookShelf, readRecords: bookReadRecords } } : {})
+              ...(includeBookData ? { bookData: { shelf: bookShelf, readRecords: bookReadRecords } } : {}),
+              passwordV2: finalPasswordV2
             }
           };
         } catch (error) {
