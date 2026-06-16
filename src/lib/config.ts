@@ -294,7 +294,6 @@ async function getInitConfig(
       PansouUsername: '',
       PansouPassword: '',
       PansouKeywordBlocklist: '',
-      enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
       // 磁链配置
       MagnetProxy: '',
       MagnetMikanReverseProxy: '',
@@ -487,7 +486,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
       PansouUsername: '',
       PansouPassword: '',
       PansouKeywordBlocklist: '',
-      enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
       MagnetProxy: '',
       MagnetMikanReverseProxy: '',
       MagnetDmhyReverseProxy: '',
@@ -549,9 +547,6 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   }
   if (adminConfig.SiteConfig.PansouKeywordBlocklist === undefined) {
     adminConfig.SiteConfig.PansouKeywordBlocklist = '';
-  }
-  if (adminConfig.SiteConfig.enabledCloudTypes === undefined) {
-    adminConfig.SiteConfig.enabledCloudTypes = ['baidu', 'aliyun', 'quark'];
   }
   if (adminConfig.SiteConfig.MagnetProxy === undefined) {
     adminConfig.SiteConfig.MagnetProxy = '';
