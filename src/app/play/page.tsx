@@ -4873,11 +4873,11 @@ function PlayPageClient() {
   const getPreferredSubtitle = (subtitles: any[]): any => {
     if (!subtitles || subtitles.length === 0) return null;
 
-    // 优先级顺序：简体中文 > 中简 > 中文 > Chinese Simplified > Chinese > chi > 第一个
+    // 优先级顺序：简体中文 > 中简 > 中文 > Chinese Simplified > Chinese > chi > chs > sc > 第一个
     const chineseKeywords = [
       '简体中文', '中简', '简体', '中文', 
       'chinese simplified', 'chinese_simplified', 'chinese-simplified',
-      'chinese', 'chi', 'zh', 'zh-cn', 'zh_cn', 'zh-cn'
+      'chinese', 'chi', 'chs', 'sc', 'zh', 'zh-cn', 'zh_cn'
     ];
 
     for (const keyword of chineseKeywords) {
