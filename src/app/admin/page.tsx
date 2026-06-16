@@ -377,7 +377,6 @@ interface SiteConfig {
   PansouUsername?: string;
   PansouPassword?: string;
   PansouKeywordBlocklist?: string;
-  enabledCloudTypes?: string[];
   MagnetProxy?: string;
   MagnetMikanReverseProxy?: string;
   MagnetDmhyReverseProxy?: string;
@@ -9646,7 +9645,6 @@ const SiteConfigComponent = ({
     PansouUsername: '',
     PansouPassword: '',
     PansouKeywordBlocklist: '',
-    enabledCloudTypes: ['baidu', 'aliyun', 'quark'],
     MagnetProxy: '',
     MagnetMikanReverseProxy: '',
     MagnetDmhyReverseProxy: '',
@@ -9758,7 +9756,6 @@ const SiteConfigComponent = ({
         PansouUsername: config.SiteConfig.PansouUsername || '',
         PansouPassword: config.SiteConfig.PansouPassword || '',
         PansouKeywordBlocklist: config.SiteConfig.PansouKeywordBlocklist || '',
-        enabledCloudTypes: config.SiteConfig.enabledCloudTypes || ['baidu', 'aliyun', 'quark'],
         MagnetProxy: config.SiteConfig.MagnetProxy || '',
         MagnetMikanReverseProxy:
           config.SiteConfig.MagnetMikanReverseProxy || '',
@@ -10823,54 +10820,6 @@ const SiteConfigComponent = ({
             />
             <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
               设置后会过滤包含这些关键词的搜索结果
-            </p>
-          </div>
-          {/* 启用的网盘类型 */}
-          <div>
-            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
-              启用的网盘类型
-            </label>
-            <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3'>
-              {[
-                { key: 'baidu', name: '百度网盘', icon: '📁' },
-                { key: 'aliyun', name: '阿里云盘', icon: '☁️' },
-                { key: 'quark', name: '夸克网盘', icon: '⚡' },
-                { key: 'tianyi', name: '天翼云盘', icon: '📱' },
-                { key: 'uc', name: 'UC网盘', icon: '🌐' },
-                { key: 'mobile', name: '移动云盘', icon: '📲' },
-                { key: '115', name: '115网盘', icon: '💾' },
-                { key: 'pikpak', name: 'PikPak', icon: '📦' },
-                { key: 'xunlei', name: '迅雷网盘', icon: '⚡' },
-                { key: '123', name: '123网盘', icon: '🔢' },
-                { key: 'magnet', name: '磁力链接', icon: '🧲' },
-                { key: 'ed2k', name: '电驴链接', icon: '🐴' }
-              ].map((type) => (
-                <label
-                  key={type.key}
-                  className='flex items-center space-x-2 p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors'
-                >
-                  <input
-                    type='checkbox'
-                    checked={siteSettings.enabledCloudTypes?.includes(type.key) ?? false}
-                    onChange={(e) => {
-                      const currentTypes = siteSettings.enabledCloudTypes || [];
-                      setSiteSettings((prev) => ({
-                        ...prev,
-                        enabledCloudTypes: e.target.checked
-                          ? [...currentTypes, type.key]
-                          : currentTypes.filter((t) => t !== type.key)
-                      }));
-                    }}
-                    className='w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 dark:border-gray-600 dark:bg-gray-700'
-                  />
-                  <span className='text-sm text-gray-700 dark:text-gray-300'>
-                    {type.icon} {type.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
-              选择要搜索的网盘类型，至少选择一个
             </p>
           </div>
         </div>
