@@ -110,7 +110,6 @@ export async function POST(request: NextRequest) {
       PansouUsername?: string;
       PansouPassword?: string;
       PansouKeywordBlocklist?: string;
-      enabledCloudTypes?: string[];
       MagnetProxy?: string;
       MagnetMikanReverseProxy?: string;
       MagnetDmhyReverseProxy?: string;
@@ -170,7 +169,6 @@ export async function POST(request: NextRequest) {
       (BannerDataSource !== undefined && typeof BannerDataSource !== 'string') ||
       (RecommendationDataSource !== undefined && typeof RecommendationDataSource !== 'string') ||
       (PansouKeywordBlocklist !== undefined && typeof PansouKeywordBlocklist !== 'string') ||
-      (enabledCloudTypes !== undefined && !Array.isArray(enabledCloudTypes)) ||
       (MagnetProxy !== undefined && typeof MagnetProxy !== 'string') ||
       (MagnetMikanReverseProxy !== undefined &&
         typeof MagnetMikanReverseProxy !== 'string') ||
@@ -256,7 +254,6 @@ export async function POST(request: NextRequest) {
       PansouUsername,
       PansouPassword,
       PansouKeywordBlocklist,
-      enabledCloudTypes,
       MagnetProxy,
       MagnetMikanReverseProxy,
       MagnetDmhyReverseProxy,
