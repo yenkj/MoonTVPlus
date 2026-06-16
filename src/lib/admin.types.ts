@@ -42,8 +42,6 @@ export interface AdminConfig {
     MagnetMikanReverseProxy?: string;
     MagnetDmhyReverseProxy?: string;
     MagnetAcgripReverseProxy?: string;
-    // 启用的网盘类型
-    enabledCloudTypes?: string[];
     // 评论功能开关
     EnableComments: boolean;
     // 自定义去广告代码
