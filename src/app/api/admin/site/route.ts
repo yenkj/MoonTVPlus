@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       PansouUsername,
       PansouPassword,
       PansouKeywordBlocklist,
-      enabledCloudTypes,
       MagnetProxy,
       MagnetMikanReverseProxy,
       MagnetDmhyReverseProxy,
@@ -158,17 +157,23 @@ export async function POST(request: NextRequest) {
         typeof DanmakuAutoLoadDefault !== 'boolean') ||
       (TMDBApiKey !== undefined && typeof TMDBApiKey !== 'string') ||
       (TMDBProxy !== undefined && typeof TMDBProxy !== 'string') ||
-      (TMDBReverseProxy !== undefined && typeof TMDBReverseProxy !== 'string') ||
+      (TMDBReverseProxy !== undefined &&
+        typeof TMDBReverseProxy !== 'string') ||
       (BangumiDataSource !== undefined &&
         BangumiDataSource !== 'direct' &&
         BangumiDataSource !== 'server-proxy' &&
         BangumiDataSource !== 'custom-baseurl') ||
-      (BangumiApiBaseUrl !== undefined && typeof BangumiApiBaseUrl !== 'string') ||
-      (BangumiImageBaseUrl !== undefined && typeof BangumiImageBaseUrl !== 'string') ||
+      (BangumiApiBaseUrl !== undefined &&
+        typeof BangumiApiBaseUrl !== 'string') ||
+      (BangumiImageBaseUrl !== undefined &&
+        typeof BangumiImageBaseUrl !== 'string') ||
       (BangumiProxy !== undefined && typeof BangumiProxy !== 'string') ||
-      (BannerDataSource !== undefined && typeof BannerDataSource !== 'string') ||
-      (RecommendationDataSource !== undefined && typeof RecommendationDataSource !== 'string') ||
-      (PansouKeywordBlocklist !== undefined && typeof PansouKeywordBlocklist !== 'string') ||
+      (BannerDataSource !== undefined &&
+        typeof BannerDataSource !== 'string') ||
+      (RecommendationDataSource !== undefined &&
+        typeof RecommendationDataSource !== 'string') ||
+      (PansouKeywordBlocklist !== undefined &&
+        typeof PansouKeywordBlocklist !== 'string') ||
       (MagnetProxy !== undefined && typeof MagnetProxy !== 'string') ||
       (MagnetMikanReverseProxy !== undefined &&
         typeof MagnetMikanReverseProxy !== 'string') ||
