@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
     const apiUrl = config.SiteConfig.PansouApiUrl;
     const username = config.SiteConfig.PansouUsername;
     const password = config.SiteConfig.PansouPassword;
-    const enabledCloudTypes = config.SiteConfig.enabledCloudTypes;
 
     console.log('Pansou 搜索请求:', {
       keyword,
@@ -51,7 +50,6 @@ export async function POST(request: NextRequest) {
     const results = await searchPansou(apiUrl, keyword, {
       username,
       password,
-      cloudTypes: enabledCloudTypes,
     });
 
     const rawBlocklist = config.SiteConfig.PansouKeywordBlocklist || '';
