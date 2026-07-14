@@ -12,6 +12,15 @@ const {
   updateTVRemoteDevice,
 } = require('./src/lib/tv-remote-hub.js');
 
+// synctv 集成相关（支持 http 和 https）
+const SYNCTV_URL = process.env.SYNCTV_URL; // 支持任意 URL，包括 https
+const SYNCTV_ADMIN_USER = process.env.SYNCTV_ADMIN_USER; // 从环境变量读取，不设默认值
+const SYNCTV_ADMIN_PASSWORD = process.env.SYNCTV_ADMIN_PASSWORD;
+
+// synctv token 缓存
+let cachedSynctvToken = null;
+let synctvTokenExpiry = 0;
+
 function shouldInitSQLite() {
   const isCloudflare = process.env.CF_PAGES === '1' || process.env.BUILD_TARGET === 'cloudflare';
   return process.env.NEXT_PUBLIC_STORAGE_TYPE === 'd1' && !isCloudflare && process.env.MOONTV_LITE !== 'true';
@@ -43,6 +52,95 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+// ==================== synctv 集成辅助函数 ====================
+
+// 获取 synctv token（自动登录）
+async function getSynctvToken() {
+  // 如果没有配置 synctv，返回 null
+  if (!SYNCTV_URL || !SYNCTV_ADMIN_USER || !SYNCTV_ADMIN_PASSWORD) {
+    return null;
+  }
+
+  // 如果 token 还没过期（提前5分钟刷新）
+  if (cachedSynctvToken && Date.now() < synctvTokenExpiry - 5 * 60 * 1000) {
+    return cachedSynctvToken;
+  }
+
+  try {
+    console.log('[synctv] Logging in to get token...');
+    const response = await fetch(`${SYNCTV_URL}/api/user/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: SYNCTV_ADMIN_USER,
+        password: SYNCTV_ADMIN_PASSWORD
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Login failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.code !== 200 || !data.data?.token) {
+      throw new Error('Invalid login response');
+    }
+
+    cachedSynctvToken = data.data.token;
+
+    // JWT token 通常有效期为 24 小时，设置过期时间
+    synctvTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
+
+    console.log('[synctv] Successfully logged in to synctv');
+    return cachedSynctvToken;
+  } catch (error) {
+    console.error('[synctv] Failed to login to synctv:', error.message);
+    return null;
+  }
+}
+
+// 创建 synctv 房间
+async function createSynctvRoom(roomData) {
+  const token = await getSynctvToken();
+  if (!token) {
+    throw new Error('Failed to get synctv token');
+  }
+
+  try {
+    const response = await fetch(`${SYNCTV_URL}/api/room/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        name: roomData.name,
+        password: roomData.password || '',
+        settings: {
+          canSee: roomData.isPublic !== false,
+          approval: false,
+          chat: true,
+        }
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.code !== 200) {
+      throw new Error(data.message || 'Failed to create room');
+    }
+
+    console.log(`[synctv] Room created: ${data.data.id}`);
+    return data.data;
+  } catch (error) {
+    console.error('[synctv] Failed to create room:', error.message);
+    throw error;
+  }
+}
+
+// ==================== 结束 synctv 集成辅助函数 ====================
 
 // 读取观影室配置的辅助函数
 async function getWatchRoomConfig() {
@@ -810,6 +908,58 @@ app.prepare().then(async () => {
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
+
+      // ==================== synctv API 路由 ====================
+      // 获取 synctv token
+      if (parsedUrl.pathname === '/api/synctv/token' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        try {
+          const token = await getSynctvToken();
+          if (token) {
+            res.end(JSON.stringify({ code: 200, data: { token } }));
+          } else {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ code: 500, error: 'Failed to get synctv token' }));
+          }
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ code: 500, error: error.message }));
+        }
+        return;
+      }
+
+      // 创建 synctv 房间
+      if (parsedUrl.pathname === '/api/synctv/room/create' && req.method === 'POST') {
+        res.setHeader('Content-Type', 'application/json');
+        try {
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk;
+          }
+          const roomData = JSON.parse(body);
+          const room = await createSynctvRoom(roomData);
+          res.end(JSON.stringify({ code: 200, data: room }));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ code: 500, error: error.message }));
+        }
+        return;
+      }
+
+      // 获取 synctv 配置信息
+      if (parsedUrl.pathname === '/api/synctv/config' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+          code: 200,
+          data: {
+            enabled: !!(SYNCTV_URL && SYNCTV_ADMIN_USER && SYNCTV_ADMIN_PASSWORD),
+            url: SYNCTV_URL
+          }
+        }));
+        return;
+      }
+      // ==================== 结束 synctv API 路由 ====================
+
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
