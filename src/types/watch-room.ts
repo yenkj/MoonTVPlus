@@ -190,9 +190,10 @@ export interface ClientToServerEvents {
 // 配置类型
 export interface WatchRoomConfig {
   enabled: boolean;
-  serverType: 'internal' | 'external';
+  serverType: 'internal' | 'external' | 'synctv';
   externalServerUrl?: string;
   externalServerAuth?: string; // 通过 /api/watch-room-auth 接口获取（需要登录）
+  roomId?: string; // synctv 模式需要 roomId
 }
 
 // LocalStorage 存储的房间信息
