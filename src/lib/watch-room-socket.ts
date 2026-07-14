@@ -59,20 +59,12 @@ class WatchRoomSocketManager {
 
     this.config = config;
 
-    // 优化连接配置，提高稳定性
     const socketOptions = {
       transports: ['websocket', 'polling'] as ('websocket' | 'polling')[],
       reconnection: true,
-      reconnectionDelay: 2000, // 增加初始重连延迟到 2 秒
-      reconnectionDelayMax: 10000, // 最大重连延迟 10 秒
-      reconnectionAttempts: 10, // 增加重连尝试次数到 10 次
-      timeout: 20000, // 连接超时 20 秒
-      forceNew: false, // 复用连接
-      upgrade: true, // 允许从 polling 升级到 websocket
-      rememberUpgrade: true, // 记住升级状态
-      perMessageDeflate: {
-        threshold: 1024, // 大于 1KB 的消息启用压缩
-      },
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
     };
 
     if (config.serverType === 'internal') {
@@ -232,12 +224,11 @@ class WatchRoomSocketManager {
       clearInterval(this.heartbeatInterval);
     }
 
-    // 降低心跳频率，减少网络开销
     this.heartbeatInterval = setInterval(() => {
       if (this.socket?.connected) {
         this.socket.emit('heartbeat');
       }
-    }, 10000); // 改为每10秒发送一次心跳，降低网络负载
+    }, 5000); // 每5秒发送一次心跳
   }
 
   // 启动心跳超时检查
