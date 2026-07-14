@@ -1,0 +1,213 @@
+/**
+ * synctv WebSocket 客户端
+ * 用于连接 synctv 服务器，提供稳定的实时通信
+ */
+
+import { adaptEventFromSynctv, adaptEventToSynctv, parseSynctvMessage } from './synctv-adapter';
+
+export interface SynctvWSConfig {
+  url: string;
+  token: string;
+  roomId?: string;
+}
+
+export type SynctvEventHandler = (event: string, data: any) => void;
+
+export class SynctvWebSocketClient {
+  private ws: WebSocket | null = null;
+  private config: SynctvWSConfig | null = null;
+  private eventHandlers: Map<string, Set<SynctvEventHandler>> = new Map();
+  private connectionPromise: Promise<void> | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private reconnectDelay = 2000;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private isConnected = false;
+
+  async connect(config: SynctvWSConfig): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.config = config;
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      try {
+        // 构建 WebSocket URL
+        const wsUrl = this.buildWebSocketUrl(config);
+
+        // 创建 WebSocket 连接
+        this.ws = new WebSocket(wsUrl, [config.token]);
+
+        this.ws.onopen = () => {
+          console.log('[synctv-ws] Connected to synctv server');
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+          this.startHeartbeat();
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          this.handleMessage(event.data);
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[synctv-ws] WebSocket error:', error);
+          if (!this.isConnected) {
+            reject(new Error('Connection failed'));
+          }
+        };
+
+        this.ws.onclose = () => {
+          console.log('[synctv-ws] Disconnected from synctv server');
+          this.isConnected = false;
+          this.stopHeartbeat();
+          this.handleReconnect();
+        };
+
+      } catch (error) {
+        console.error('[synctv-ws] Failed to create WebSocket:', error);
+        reject(error);
+      }
+    });
+
+    return this.connectionPromise;
+  }
+
+  private buildWebSocketUrl(config: SynctvWSConfig): string {
+    const url = new URL(config.url);
+    // 将 http/https 转换为 ws/wss
+    if (url.protocol === 'http:') {
+      url.protocol = 'ws:';
+    } else if (url.protocol === 'https:') {
+      url.protocol = 'wss:';
+    }
+    // synctv WebSocket 路径
+    url.pathname = '/api/room/ws';
+    return url.toString();
+  }
+
+  private handleMessage(message: string) {
+    try {
+      const parsed = parseSynctvMessage(message);
+      if (!parsed) {
+        console.warn('[synctv-ws] Failed to parse message:', message);
+        return;
+      }
+
+      // 将 synctv 事件转换为 MoonTVPlus 事件
+      const { event, data } = adaptEventFromSynctv(parsed.event, parsed.data);
+
+      // 触发事件处理器
+      this.emit(event, data);
+    } catch (error) {
+      console.error('[synctv-ws] Error handling message:', error);
+    }
+  }
+
+  private emit(event: string, data: any) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          handler(event, data);
+        } catch (error) {
+          console.error(`[synctv-ws] Error in event handler for ${event}:`, error);
+        }
+      });
+    }
+  }
+
+  private async handleReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[synctv-ws] Max reconnect attempts reached');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * this.reconnectAttempts;
+
+    console.log(`[synctv-ws] Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    if (this.config) {
+      try {
+        await this.connect(this.config);
+      } catch (error) {
+        console.error('[synctv-ws] Reconnect failed:', error);
+      }
+    }
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.send('heartbeat', {});
+      }
+    }, 10000); // 每10秒发送心跳
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  // 发送事件
+  send(event: string, data: any) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[synctv-ws] WebSocket is not connected');
+      return;
+    }
+
+    // 将 MoonTVPlus 事件转换为 synctv 事件
+    const { event: synctvEvent, data: synctvData } = adaptEventToSynctv(event, data);
+
+    const message = JSON.stringify({
+      type: synctvEvent,
+      payload: synctvData,
+    });
+
+    this.ws.send(message);
+  }
+
+  // 监听事件
+  on(event: string, handler: SynctvEventHandler) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, new Set());
+    }
+    this.eventHandlers.get(event)!.add(handler);
+  }
+
+  // 移除事件监听
+  off(event: string, handler: SynctvEventHandler) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.delete(handler);
+    }
+  }
+
+  // 断开连接
+  disconnect() {
+    this.stopHeartbeat();
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.isConnected = false;
+    this.connectionPromise = null;
+  }
+
+  // 获取连接状态
+  getConnected(): boolean {
+    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+}
