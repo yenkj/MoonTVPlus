@@ -554,6 +554,8 @@ class WatchRoomServer {
             userId: socket.id,
             audioData: data.audioData,
             sampleRate: data.sampleRate || 16000,
+            sequence: data.sequence, // 转发序列号
+            timestamp: data.timestamp || Date.now(), // 转发时间戳
           });
         } catch (error) {
           console.error('[WatchRoom] Error forwarding audio chunk:', error);
