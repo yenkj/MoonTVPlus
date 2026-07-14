@@ -592,17 +592,6 @@ MoonTVPlus 支持与 [synctv](https://github.com/synctv-org/synctv) 集成，使
    SYNCTV_ADMIN_PASSWORD=your-admin-password
    ```
 
-4. 启动 MoonTVPlus
-
-   ```bash
-   # 开发模式
-   pnpm dev
-
-   # 生产模式
-   pnpm build
-   pnpm start
-   ```
-
 **注意事项：**
 - MoonTVPlus 会自动使用配置的管理员账号登录 synctv 并获取 token
 - 用户无需知道 synctv 的存在，直接使用 MoonTVPlus 的观影室功能即可
