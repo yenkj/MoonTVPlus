@@ -268,7 +268,7 @@ export default async function RootLayout({
     ENABLE_OFFLINE_DOWNLOAD:
       process.env.NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD === 'true',
     VOICE_CHAT_STRATEGY:
-      process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'webrtc-fallback',
+      process.env.NEXT_PUBLIC_VOICE_CHAT_STRATEGY || 'server-only', // 默认使用服务器中转模式，更稳定
     OPENLIST_ENABLED: openListEnabled && userFeatureAccess.private_library,
     EMBY_ENABLED: embyEnabled && userFeatureAccess.emby,
     XIAOYA_ENABLED: xiaoyaEnabled && userFeatureAccess.xiaoya,
