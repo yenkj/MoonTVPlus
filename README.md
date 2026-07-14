@@ -552,42 +552,13 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 - server-only：仅使用服务器中转（适用于无法建立 P2P 连接的网络环境）
 
 ### synctv 集成部署
-
-MoonTVPlus 支持与 [synctv](https://github.com/synctv-org/synctv) 集成，使用 synctv 稳定的 WebSocket 服务作为观影室后端。
-
-**优势：**
-- ✅ 稳定性高：synctv 经过生产环境验证
-- ✅ 性能优秀：Go 语言编写，性能强劲
-- ✅ 零配置：MoonTVPlus 自动管理 synctv 认证
-- ✅ 功能完整：保留 MoonTVPlus 所有观影室功能
-
-**部署步骤：**
-
-1. 部署 synctv 服务器
-
-   ```bash
-   # 使用 Docker 部署（推荐）
-   docker run -d \
-     --name synctv \
-     -p 8080:8080 \
-     -e INITIAL_ROOT_PASSWORD=your-root-password \
-     synctv/synctv:latest
-
-   # 或使用 Docker Compose
-   # 请参考 synctv 官方文档：https://github.com/synctv-org/synctv
-   ```
-
-2. 在 synctv 中创建管理员账号（首次访问 Web 界面时会引导创建）
-
-3. 在 MoonTVPlus 中配置环境变量
-
    ```env
    # 观影室配置
    WATCH_ROOM_ENABLED=true
    WATCH_ROOM_SERVER_TYPE=synctv
 
    # synctv 配置
-   SYNCTV_URL=http://localhost:8080  # 或 https://your-synctv-server.com
+   SYNCTV_URL=https://your-synctv-server.com
    SYNCTV_ADMIN_USER=your-admin-username
    SYNCTV_ADMIN_PASSWORD=your-admin-password
    ```
