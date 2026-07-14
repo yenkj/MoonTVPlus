@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
 
   // Lite 镜像不暴露内置观影室能力，避免前端尝试连接本地 Socket.IO 服务
   // 注意：不要暴露 externalServerAuth 到前端，这是敏感凭据
-  // 观影室默认启用，无需配置环境变量（只有明确设置为 'false' 时才禁用）
   const watchRoomConfig = isLiteMode
     ? {
         enabled: false,
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
         externalServerUrl: undefined,
       }
     : {
-        enabled: process.env.WATCH_ROOM_ENABLED !== 'false', // 默认启用
+        enabled: process.env.WATCH_ROOM_ENABLED === 'true',
         serverType:
           (process.env.WATCH_ROOM_SERVER_TYPE as 'internal' | 'external') || 'internal',
         externalServerUrl: process.env.WATCH_ROOM_EXTERNAL_SERVER_URL,
