@@ -11,7 +11,8 @@ export interface SynctvWSConfig {
   roomId?: string;
 }
 
-export type SynctvEventHandler = (event: string, data: any) => void;
+// 使用与 Socket.IO 兼容的事件处理器签名
+export type SynctvEventHandler = (data: any) => void;
 
 export class SynctvWebSocketClient {
   private ws: WebSocket | null = null;
@@ -114,7 +115,8 @@ export class SynctvWebSocketClient {
     if (handlers) {
       handlers.forEach(handler => {
         try {
-          handler(event, data);
+          // 只传递 data，与 Socket.IO 的签名一致
+          handler(data);
         } catch (error) {
           console.error(`[synctv-ws] Error in event handler for ${event}:`, error);
         }
