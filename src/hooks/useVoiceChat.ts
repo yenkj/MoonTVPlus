@@ -382,6 +382,17 @@ export function useVoiceChat({
 
   // ==================== 服务器中转逻辑 ====================
 
+  // 音频数据发送队列和节流控制
+  const audioQueueRef = useRef<{
+    lastSendTime: number;
+    queueSize: number;
+    droppedPackets: number;
+  }>({
+    lastSendTime: 0,
+    queueSize: 0,
+    droppedPackets: 0
+  });
+
   // 启动服务器中转
   const startServerRelay = useCallback(() => {
     if (!socket || !localStreamRef.current) {
@@ -408,8 +419,33 @@ export function useVoiceChat({
       // 保存roomId的引用，避免闭包问题
       const currentRoomId = roomId;
 
+      // 节流控制参数
+      const MIN_SEND_INTERVAL = 50; // 最小发送间隔（毫秒）
+      const MAX_QUEUE_SIZE = 10; // 最大队列大小
+      const MAX_DROPPED_PACKETS = 100; // 最大丢包数，超过则重置
+
       processor.onaudioprocess = (e) => {
         if (!socket || !socket.connected) {
+          return;
+        }
+
+        const now = Date.now();
+        const queueState = audioQueueRef.current;
+
+        // 节流控制：如果距离上次发送时间太短，跳过本次发送
+        if (now - queueState.lastSendTime < MIN_SEND_INTERVAL) {
+          return;
+        }
+
+        // 如果队列堆积太多，丢弃本次数据包
+        if (queueState.queueSize >= MAX_QUEUE_SIZE) {
+          queueState.droppedPackets++;
+          if (queueState.droppedPackets > MAX_DROPPED_PACKETS) {
+            // 重置队列状态
+            queueState.queueSize = 0;
+            queueState.droppedPackets = 0;
+            console.warn('[VoiceChat] Audio queue overflow, resetting...');
+          }
           return;
         }
 
@@ -449,12 +485,24 @@ export function useVoiceChat({
           return;
         }
 
+        // 更新发送状态
+        queueState.lastSendTime = now;
+        queueState.queueSize++;
+
         // 发送PCM数据到服务器
-        socket.emit('voice:audio-chunk', {
-          roomId: currentRoomId,
-          audioData: Array.from(new Uint8Array(pcmData.buffer)),
-          sampleRate: 16000,
-        });
+        try {
+          socket.emit('voice:audio-chunk', {
+            roomId: currentRoomId,
+            audioData: Array.from(new Uint8Array(pcmData.buffer)),
+            sampleRate: 16000,
+          });
+
+          // 发送成功后减少队列计数
+          queueState.queueSize = Math.max(0, queueState.queueSize - 1);
+        } catch (err) {
+          console.error('[VoiceChat] Failed to send audio chunk:', err);
+          queueState.queueSize = Math.max(0, queueState.queueSize - 1);
+        }
       };
 
       source.connect(processor);
@@ -521,17 +569,22 @@ export function useVoiceChat({
     switchToServerRelayRef.current = switchToServerRelay;
   }, [switchToServerRelay]);
 
-  // 播放服务器中转的音频 - 使用Web Audio API播放PCM数据
+  // 播放服务器中转的音频 - 使用Web Audio API播放PCM数据（优化版）
   const playServerRelayAudio = useCallback(async (userId: string, audioData: number[], sampleRate = 16000) => {
     if (!isSpeakerEnabled) return;
 
     try {
       // 创建AudioContext（如果不存在）
       if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
+        audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       }
 
       const audioContext = audioContextRef.current;
+
+      // 如果 AudioContext 被暂停，恢复它
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
 
       // 将Uint8Array转换回Int16Array (PCM数据)
       const uint8Array = new Uint8Array(audioData);
@@ -556,32 +609,40 @@ export function useVoiceChat({
       let nextPlayTime = nextPlayTimeRef.current.get(userId) || currentTime;
 
       // 检查播放队列是否堆积过多（说明网络延迟导致音频堆积）
-      const MAX_QUEUE_DELAY = 0.5; // 最大允许队列延迟 500ms
+      const MAX_QUEUE_DELAY = 0.3; // 降低到 300ms，更激进地丢弃延迟包
       const queueDelay = nextPlayTime - currentTime;
 
       if (queueDelay > MAX_QUEUE_DELAY) {
         // 播放队列堆积太多，丢弃这个音频包并重置队列
+        // 这样可以避免音频延迟累积
         console.warn(`[VoiceChat] Dropping audio from ${userId} due to queue buildup: ${(queueDelay * 1000).toFixed(0)}ms`);
         nextPlayTimeRef.current.set(userId, currentTime);
         return; // 丢弃这个音频包
       }
 
-      // 如果下一个播放时间已经过去，使用当前时间
+      // 如果下一个播放时间已经过去，使用当前时间加上小延迟
       if (nextPlayTime < currentTime) {
-        nextPlayTime = currentTime;
+        nextPlayTime = currentTime + 0.01; // 添加 10ms 缓冲，避免爆音
       }
 
       // 创建AudioBufferSourceNode并调度播放
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
+
+      // 添加一个小的增益节点，平滑音频过渡
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 1.0;
+
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
       source.start(nextPlayTime);
 
       // 更新下一个播放时间
       nextPlayTimeRef.current.set(userId, nextPlayTime + duration);
     } catch (err) {
       console.error('[VoiceChat] Failed to play audio:', err);
-      setError('音频播放失败: ' + (err as Error).message);
+      // 不设置错误状态，避免频繁的错误提示影响用户体验
     }
   }, [isSpeakerEnabled]);
 
