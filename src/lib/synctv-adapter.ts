@@ -1,112 +1,68 @@
 /**
  * synctv 事件协议适配器
- * 用于适配 synctv 和 MoonTVPlus 之间的事件协议差异
+ * 只使用语音功能，播放同步由 MoonTVPlus 自身处理
  */
 
-// 事件名称映射表
-const EVENT_MAP: Record<string, string> = {
-  // 房间管理（大部分相同）
+// 只转发语音和基础房间管理事件
+const ENABLED_EVENTS: Record<string, string> = {
+  // 房间管理（基础功能）
   'room:create': 'room:create',
   'room:join': 'room:join',
   'room:leave': 'room:leave',
-  'room:list': 'room:list',
+  'room:info': 'room:info',
+  'room:joined': 'room:joined',
+  'room:member-joined': 'room:member-joined',
+  'room:member-left': 'room:member-left',
 
-  // 播放控制
-  'play:update': 'play:update',
-  'play:seek': 'play:seek',
-  'play:play': 'play:play',
-  'play:pause': 'play:pause',
-  'play:change': 'play:change',
+  // 语音聊天（核心功能）
+  'voice:audio-chunk': 'voice:audio-chunk',
 
-  // 直播和音乐
-  'live:change': 'live:change',
-  'music:change': 'music:change',
-  'music:update': 'music:update',
-  'music:queue': 'music:queue',
-  'music:play': 'music:play',
-  'music:pause': 'music:pause',
-  'music:seek': 'music:seek',
-
-  // 屏幕共享
-  'screen:helper-register': 'screen:helper-register',
-  'screen:start': 'screen:start',
-  'screen:stop': 'screen:stop',
-  'screen:viewer-ready': 'screen:viewer-ready',
-  'screen:offer': 'screen:offer',
-  'screen:answer': 'screen:answer',
-  'screen:ice': 'screen:ice',
-
-  // 聊天
-  'chat:message': 'chat:message',
-
-  // 语音（synctv 可能不支持所有语音事件）
-  'voice:offer': 'voice:offer',
-  'voice:answer': 'voice:answer',
-  'voice:ice': 'voice:ice',
-  'voice:audio-chunk': 'voice:audio-chunk', // MoonTVPlus 特有
-
-  // 心跳
+  // 心跳（保持连接）
   'heartbeat': 'heartbeat',
 };
 
 /**
  * 将 MoonTVPlus 事件转换为 synctv 事件
+ * 只转发语音和房间管理事件，播放同步由 MoonTVPlus 自身处理
  */
-export function adaptEventToSynctv(event: string, data: any): { event: string; data: any } {
-  const synctvEvent = EVENT_MAP[event] || event;
-
-  // 数据格式适配（如果需要）
-  let synctvData = { ...data };
-
-  // 特殊处理：房间创建
-  if (event === 'room:create') {
-    synctvData = {
-      ...data,
-      // synctv 特定字段
-      settings: {
-        canSee: data.isPublic !== false,
-        approval: false,
-        chat: true,
-      }
-    };
+export function adaptEventToSynctv(event: string, data: any): { event: string; data: any } | null {
+  // 只转发启用的事件
+  const synctvEvent = ENABLED_EVENTS[event];
+  if (!synctvEvent) {
+    // 播放控制、聊天、屏幕共享等事件不转发
+    return null;
   }
 
-  return { event: synctvEvent, data: synctvData };
+  return { event: synctvEvent, data };
 }
 
 /**
  * 将 synctv 事件转换为 MoonTVPlus 事件
+ * 只接收语音和房间管理事件
  */
-export function adaptEventFromSynctv(event: string, data: any): { event: string; data: any } {
-  // 反向查找事件名称
-  let moontvEvent = event;
-  for (const [key, value] of Object.entries(EVENT_MAP)) {
+export function adaptEventFromSynctv(event: string, data: any): { event: string; data: any } | null {
+  // 只接收启用的事件
+  let moontvEvent: string | null = null;
+  for (const [key, value] of Object.entries(ENABLED_EVENTS)) {
     if (value === event) {
       moontvEvent = key;
       break;
     }
   }
 
-  // 数据格式适配（如果需要）
-  let moontvData = { ...data };
-
-  // 特殊处理：房间信息
-  if (event === 'room:info' || event === 'room:joined') {
-    moontvData = {
-      ...data,
-      // 转换 synctv 特定字段为 MoonTVPlus 格式
-      isPublic: data.settings?.canSee !== false,
-    };
+  if (!moontvEvent) {
+    // 忽略其他事件
+    return null;
   }
 
-  return { event: moontvEvent, data: moontvData };
+  return { event: moontvEvent, data };
 }
 
 /**
  * 检查事件是否支持
  */
 export function isEventSupported(event: string): boolean {
-  return event in EVENT_MAP;
+  return event in ENABLED_EVENTS;
 }
 
 /**
