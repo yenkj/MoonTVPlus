@@ -64,6 +64,7 @@
 - [配置文件](#配置文件)
 - [自动更新](#自动更新)
 - [环境变量](#环境变量)
+- [synctv 集成部署](#synctv-集成部署)
 - [外部观影室服务器部署](#外部观影室服务器部署)
 - [弹幕后端部署](#弹幕后端部署)
 - [超分功能说明](#超分功能说明)
@@ -477,10 +478,13 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | TVBOX_SUBSCRIBE_TOKEN                    | TVBOX 订阅 API 访问 Token，如启用TVBOX功能必须设置该项       | 任意字符串                  | (空)                                                         |
 | TVBOX_BLOCKED_SOURCES                    | TVBOX 订阅屏蔽源列表（多个源用逗号分隔，匹配视频源的 key）   | 逗号分隔的源 key            | (空)                                                         |
 | WATCH_ROOM_ENABLED                       | 是否启用观影室功能（vercel部署不支持该功能，可使用外部服务器） | true/false                  | false                                                        |
-| WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                             | internal/external           | internal                                                     |
+| WATCH_ROOM_SERVER_TYPE                   | 观影室服务器类型                                             | internal/external/synctv    | internal                                                     |
 | WATCH_ROOM_EXTERNAL_SERVER_URL           | 外部观影室服务器地址（当 SERVER_TYPE 为 external 时必填）    | WebSocket URL               | (空)                                                         |
 | WATCH_ROOM_EXTERNAL_SERVER_AUTH          | 外部观影室服务器认证令牌（当 SERVER_TYPE 为 external 时必填） | 任意字符串                  | (空)                                                         |
 | NEXT_PUBLIC_VOICE_CHAT_STRATEGY          | 观影室语音聊天策略                                           | webrtc-fallback/server-only | webrtc-fallback                                              |
+| SYNCTV_URL                               | synctv 服务器地址（当 SERVER_TYPE 为 synctv 时必填）        | URL（支持 http/https）      | (空)                                                         |
+| SYNCTV_ADMIN_USER                        | synctv 管理员用户名（当 SERVER_TYPE 为 synctv 时必填）      | 字符串                      | (空)                                                         |
+| SYNCTV_ADMIN_PASSWORD                    | synctv 管理员密码（当 SERVER_TYPE 为 synctv 时必填）        | 字符串                      | (空)                                                         |
 | NEXT_PUBLIC_ENABLE_OFFLINE_DOWNLOAD      | 是否启用服务器离线下载功能（开启后也仅管理员和站长可用）     | true/false                  | false                                                        |
 | OFFLINE_DOWNLOAD_DIR                     | 离线下载文件存储目录                                         | 任意有效路径                | /data                                                        |
 | OFFLINE_DOWNLOAD_PROXY                   | 离线下载代理                                                 | http://host:port         | (空)                                                         |
@@ -546,6 +550,67 @@ NEXT_PUBLIC_VOICE_CHAT_STRATEGY 选项解释：
 
 - webrtc-fallback：使用 WebRTC P2P 连接，失败时自动回退到服务器中转（推荐）
 - server-only：仅使用服务器中转（适用于无法建立 P2P 连接的网络环境）
+
+### synctv 集成部署
+
+MoonTVPlus 支持与 [synctv](https://github.com/synctv-org/synctv) 集成，使用 synctv 稳定的 WebSocket 服务作为观影室后端。
+
+**优势：**
+- ✅ 稳定性高：synctv 经过生产环境验证
+- ✅ 性能优秀：Go 语言编写，性能强劲
+- ✅ 零配置：MoonTVPlus 自动管理 synctv 认证
+- ✅ 功能完整：保留 MoonTVPlus 所有观影室功能
+
+**部署步骤：**
+
+1. 部署 synctv 服务器
+
+   ```bash
+   # 使用 Docker 部署（推荐）
+   docker run -d \
+     --name synctv \
+     -p 8080:8080 \
+     -e INITIAL_ROOT_PASSWORD=your-root-password \
+     synctv/synctv:latest
+
+   # 或使用 Docker Compose
+   # 请参考 synctv 官方文档：https://github.com/synctv-org/synctv
+   ```
+
+2. 在 synctv 中创建管理员账号（首次访问 Web 界面时会引导创建）
+
+3. 在 MoonTVPlus 中配置环境变量
+
+   ```env
+   # 观影室配置
+   WATCH_ROOM_ENABLED=true
+   WATCH_ROOM_SERVER_TYPE=synctv
+
+   # synctv 配置
+   SYNCTV_URL=http://localhost:8080  # 或 https://your-synctv-server.com
+   SYNCTV_ADMIN_USER=your-admin-username
+   SYNCTV_ADMIN_PASSWORD=your-admin-password
+   ```
+
+4. 启动 MoonTVPlus
+
+   ```bash
+   # 开发模式
+   pnpm dev
+
+   # 生产模式
+   pnpm build
+   pnpm start
+   ```
+
+**注意事项：**
+- MoonTVPlus 会自动使用配置的管理员账号登录 synctv 并获取 token
+- 用户无需知道 synctv 的存在，直接使用 MoonTVPlus 的观影室功能即可
+- 所有房间创建、管理等操作都会自动通过 synctv 进行
+
+**配置示例：**
+
+参考 `.env.synctv.example` 文件进行配置。
 
 ### 外部观影室服务器部署
 
