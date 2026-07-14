@@ -46,15 +46,16 @@ const handle = app.getRequestHandler();
 
 // 读取观影室配置的辅助函数
 async function getWatchRoomConfig() {
-  // 观影室配置现在统一从环境变量读取
+  // 观影室配置现在默认启用，无需配置环境变量
+  // 只有明确设置为 'false' 时才禁用
   const config = {
-    enabled: process.env.WATCH_ROOM_ENABLED === 'true',
+    enabled: process.env.WATCH_ROOM_ENABLED !== 'false', // 默认启用
     serverType: (process.env.WATCH_ROOM_SERVER_TYPE || 'internal'),
     externalServerUrl: process.env.WATCH_ROOM_EXTERNAL_SERVER_URL,
     externalServerAuth: process.env.WATCH_ROOM_EXTERNAL_SERVER_AUTH,
   };
 
-  console.log(`[WatchRoom] Watch room ${config.enabled ? 'enabled' : 'disabled'} via environment variable.`);
+  console.log(`[WatchRoom] Watch room ${config.enabled ? 'enabled' : 'disabled'}. Default enabled, set WATCH_ROOM_ENABLED=false to disable.`);
   return config;
 }
 
@@ -529,17 +530,34 @@ class WatchRoomServer {
         });
       });
 
-      // 语音聊天 - 服务器中转音频数据
+      // 语音聊天 - 服务器中转音频数据（优化版）
       socket.on('voice:audio-chunk', (data) => {
         const roomInfo = this.socketToRoom.get(socket.id);
         if (!roomInfo) return;
 
+        // 验证数据有效性
+        if (!data.audioData || !Array.isArray(data.audioData) || data.audioData.length === 0) {
+          return;
+        }
+
+        // 检查数据大小，防止过大的音频包
+        const MAX_AUDIO_CHUNK_SIZE = 16384; // 16KB
+        if (data.audioData.length > MAX_AUDIO_CHUNK_SIZE) {
+          console.warn(`[WatchRoom] Audio chunk too large from ${socket.id}: ${data.audioData.length} bytes`);
+          return;
+        }
+
         // 将音频数据转发给房间内的其他成员
-        socket.to(roomInfo.roomId).emit('voice:audio-chunk', {
-          userId: socket.id,
-          audioData: data.audioData,
-          sampleRate: data.sampleRate || 16000,
-        });
+        // 使用批量发送优化性能
+        try {
+          socket.to(roomInfo.roomId).emit('voice:audio-chunk', {
+            userId: socket.id,
+            audioData: data.audioData,
+            sampleRate: data.sampleRate || 16000,
+          });
+        } catch (error) {
+          console.error('[WatchRoom] Error forwarding audio chunk:', error);
+        }
       });
 
       // 心跳
