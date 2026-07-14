@@ -101,7 +101,14 @@ export class SynctvWebSocketClient {
       }
 
       // 将 synctv 事件转换为 MoonTVPlus 事件
-      const { event, data } = adaptEventFromSynctv(parsed.event, parsed.data);
+      const adapted = adaptEventFromSynctv(parsed.event, parsed.data);
+      
+      // 如果返回 null，表示该事件被忽略
+      if (!adapted) {
+        return;
+      }
+
+      const { event, data } = adapted;
 
       // 触发事件处理器
       this.emit(event, data);
@@ -171,7 +178,14 @@ export class SynctvWebSocketClient {
     }
 
     // 将 MoonTVPlus 事件转换为 synctv 事件
-    const { event: synctvEvent, data: synctvData } = adaptEventToSynctv(event, data);
+    const adapted = adaptEventToSynctv(event, data);
+    
+    // 如果返回 null，表示该事件不应转发到 synctv
+    if (!adapted) {
+      return;
+    }
+
+    const { event: synctvEvent, data: synctvData } = adapted;
 
     const message = JSON.stringify({
       type: synctvEvent,
