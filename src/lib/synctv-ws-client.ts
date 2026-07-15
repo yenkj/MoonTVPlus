@@ -170,7 +170,7 @@ export class SynctvWebSocketClient {
     }
   }
 
-  // 发送事件
+  // 发送事件（send 方法）
   send(event: string, data: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[synctv-ws] WebSocket is not connected');
@@ -193,6 +193,11 @@ export class SynctvWebSocketClient {
     });
 
     this.ws.send(message);
+  }
+
+  // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
+  emit(event: string, data: any) {
+    this.send(event, data);
   }
 
   // 监听事件
