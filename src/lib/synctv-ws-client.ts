@@ -111,13 +111,13 @@ export class SynctvWebSocketClient {
       const { event, data } = adapted;
 
       // 触发事件处理器
-      this.triggerHandlers(event, data);
+      this.emit(event, data);
     } catch (error) {
       console.error('[synctv-ws] Error handling message:', error);
     }
   }
 
-  private triggerHandlers(event: string, data: any) {
+  private emit(event: string, data: any) {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach(handler => {
@@ -170,7 +170,7 @@ export class SynctvWebSocketClient {
     }
   }
 
-  // 发送事件（send 方法）
+  // 发送事件
   send(event: string, data: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[synctv-ws] WebSocket is not connected');
@@ -195,11 +195,6 @@ export class SynctvWebSocketClient {
     this.ws.send(message);
   }
 
-  // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
-  emit(event: string, data: any) {
-    this.send(event, data);
-  }
-
   // 监听事件
   on(event: string, handler: SynctvEventHandler) {
     if (!this.eventHandlers.has(event)) {
@@ -213,22 +208,6 @@ export class SynctvWebSocketClient {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.delete(handler);
-    }
-  }
-
-  // once 方法（只监听一次，用于兼容 Socket.IO 接口）
-  once(event: string, handler: SynctvEventHandler) {
-    const onceHandler = (data: any) => {
-      this.off(event, onceHandler);
-      handler(data);
-    };
-    this.on(event, onceHandler);
-  }
-
-  // connect 方法（用于兼容 Socket.IO 接口，实际上在创建时已连接）
-  connect() {
-    if (!this.isConnected && this.config) {
-      this.connectToServer(this.config);
     }
   }
 
@@ -246,10 +225,5 @@ export class SynctvWebSocketClient {
   // 获取连接状态
   getConnected(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
-  }
-
-  // connected 属性（用于兼容 Socket.IO 接口）
-  get connected(): boolean {
-    return this.getConnected();
   }
 }
