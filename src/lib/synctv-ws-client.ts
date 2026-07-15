@@ -111,13 +111,13 @@ export class SynctvWebSocketClient {
       const { event, data } = adapted;
 
       // 触发事件处理器
-      this.emit(event, data);
+      this.triggerHandlers(event, data);
     } catch (error) {
       console.error('[synctv-ws] Error handling message:', error);
     }
   }
 
-  private emit(event: string, data: any) {
+  private triggerHandlers(event: string, data: any) {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach(handler => {
@@ -216,6 +216,22 @@ export class SynctvWebSocketClient {
     }
   }
 
+  // once 方法（只监听一次，用于兼容 Socket.IO 接口）
+  once(event: string, handler: SynctvEventHandler) {
+    const onceHandler = (data: any) => {
+      this.off(event, onceHandler);
+      handler(data);
+    };
+    this.on(event, onceHandler);
+  }
+
+  // connect 方法（用于兼容 Socket.IO 接口，实际上在创建时已连接）
+  connect() {
+    if (!this.isConnected && this.config) {
+      this.connectToServer(this.config);
+    }
+  }
+
   // 断开连接
   disconnect() {
     this.stopHeartbeat();
@@ -230,5 +246,10 @@ export class SynctvWebSocketClient {
   // 获取连接状态
   getConnected(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  // connected 属性（用于兼容 Socket.IO 接口）
+  get connected(): boolean {
+    return this.getConnected();
   }
 }
