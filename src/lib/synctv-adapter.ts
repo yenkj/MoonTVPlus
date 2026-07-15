@@ -1,19 +1,10 @@
 /**
  * synctv 事件协议适配器
- * 只使用语音功能，播放同步由 MoonTVPlus 自身处理
+ * 只用于语音聊天，其他功能由 MoonTVPlus 内置服务器处理
  */
 
-// 只转发语音和基础房间管理事件
+// 只转发语音相关事件
 const ENABLED_EVENTS: Record<string, string> = {
-  // 房间管理（基础功能）
-  'room:create': 'room:create',
-  'room:join': 'room:join',
-  'room:leave': 'room:leave',
-  'room:info': 'room:info',
-  'room:joined': 'room:joined',
-  'room:member-joined': 'room:member-joined',
-  'room:member-left': 'room:member-left',
-
   // 语音聊天（核心功能）
   'voice:audio-chunk': 'voice:audio-chunk',
 
