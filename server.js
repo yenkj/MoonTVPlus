@@ -977,8 +977,10 @@ app.prepare().then(async () => {
   let io = null;
 
   const tvModeEnabled = isTVModeEnabled();
+  // 当配置为 synctv 时，仍然启动内置服务器来处理播放同步、聊天等功能
+  // 只是语音聊天通过 synctv 进行
   const shouldStartInternalWatchRoom =
-    watchRoomConfig.enabled && watchRoomConfig.serverType === 'internal';
+    watchRoomConfig.enabled && watchRoomConfig.serverType !== 'external';
 
   if (tvModeEnabled || shouldStartInternalWatchRoom) {
     io = new Server(httpServer, {
@@ -1001,6 +1003,10 @@ app.prepare().then(async () => {
     // 初始化观影室服务器
     watchRoomServer = new WatchRoomServer(io);
     console.log('[WatchRoom] Socket.IO server initialized');
+    
+    if (watchRoomConfig.serverType === 'synctv') {
+      console.log('[WatchRoom] Voice chat will use synctv server for better stability');
+    }
   } else {
     if (!watchRoomConfig.enabled) {
       console.log('[WatchRoom] Watch room is disabled');
