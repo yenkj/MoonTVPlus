@@ -24,12 +24,11 @@ class WatchRoomSocketManager {
   private reconnectSuccessCallback: (() => void) | null = null;
 
   async connect(config: WatchRoomConfig): Promise<WatchRoomSocket> {
-    // 如果配置为 synctv 模式，使用 synctv WebSocket 客户端
-    if (config.serverType === 'synctv') {
-      return this.connectToSynctv(config);
-    }
+    // synctv 模式下，仍然连接 MoonTVPlus 内置服务器
+    // 语音聊天会使用独立的 synctv 连接（在 useVoiceChat 中处理）
+    // 不再使用 connectToSynctv
 
-    // 否则使用原有的 Socket.IO 连接逻辑
+    // 使用原有的 Socket.IO 连接逻辑
     if (this.socket && 'connected' in this.socket && this.socket.connected) {
       return this.socket;
     }
