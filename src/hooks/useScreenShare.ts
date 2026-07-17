@@ -133,8 +133,8 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
     const pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = (event) => {  
-      if (event.candidate && socket) { 
-        if ('emit' in socket) {  
+      if (event.candidate && socket) {  
+        if ('io' in socket) {  
           socket.emit('screen:ice', {  
             targetUserId: userId,  
             candidate: event.candidate.toJSON(),  
