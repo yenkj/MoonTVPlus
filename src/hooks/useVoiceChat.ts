@@ -668,7 +668,7 @@ export function useVoiceChat({
             let otherMembers = members;
             if ('io' in socket) {
               otherMembers = members.filter(m => m.id !== socket.id);
-            }  
+            }
             console.log('[VoiceChat] Found', otherMembers.length, 'other members, initiating connections');
 
             if (otherMembers.length > 0) {
