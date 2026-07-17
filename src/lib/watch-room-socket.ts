@@ -78,7 +78,8 @@ class WatchRoomSocketManager {
       reconnectionAttempts: 5,
     };
 
-    if (config.serverType === 'internal') {
+    // synctv 模式也使用内置服务器（只有语音用 synctv）
+    if (config.serverType === 'internal' || config.serverType === 'synctv') {
       // 内部服务器 - 连接到同一个域名的Socket.IO服务器
       this.socket = io({
         ...socketOptions,
