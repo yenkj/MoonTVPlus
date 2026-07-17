@@ -223,6 +223,17 @@ export class SynctvWebSocketClient {
     this.eventHandlers.get(event)!.add(handler);
   }
 
+  // 只监听一次事件（触发后自动移除）
+  once(event: string, handler: SynctvEventHandler) {
+    const wrappedHandler: SynctvEventHandler = (data) => {
+      // 先移除监听器
+      this.off(event, wrappedHandler);
+      // 再调用原始处理器
+      handler(data);
+    };
+    this.on(event, wrappedHandler);
+  }
+
   // 移除事件监听（handler 可选，如果不提供则移除该事件的所有监听器）
   off(event: string, handler?: SynctvEventHandler) {
     const handlers = this.eventHandlers.get(event);
