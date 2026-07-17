@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
         externalServerUrl: undefined,
       }
     : {
-        enabled: process.env.WATCH_ROOM_ENABLED === 'true',
+        enabled: process.env.WATCH_ROOM_ENABLED !== 'false', // 默认 true，只有明确设为 false 才禁用
         serverType:
-          (process.env.WATCH_ROOM_SERVER_TYPE as 'internal' | 'external') || 'internal',
+          (process.env.WATCH_ROOM_SERVER_TYPE as 'internal' | 'external' | 'synctv') || 'internal',
         externalServerUrl: process.env.WATCH_ROOM_EXTERNAL_SERVER_URL,
       };
 
