@@ -179,8 +179,8 @@ export class SynctvWebSocketClient {
     }
   }
 
-  // 发送事件
-  send(event: string, data: any) {
+  // 发送事件（send 方法）
+  send(event: string, data?: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('[synctv-ws] WebSocket is not connected');
       return;
@@ -188,7 +188,7 @@ export class SynctvWebSocketClient {
 
     // 将 MoonTVPlus 事件转换为 synctv 事件
     const adapted = adaptEventToSynctv(event, data);
-    
+
     // 如果返回 null，表示该事件不应转发到 synctv
     if (!adapted) {
       return;
@@ -205,7 +205,7 @@ export class SynctvWebSocketClient {
   }
 
   // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
-  emit(event: string, data: any, callback?: (response: any) => void) {
+  emit(event: string, data?: any, callback?: (response: any) => void) {
     this.send(event, data);
 
     // 如果有回调，模拟 Socket.IO 的回调行为
