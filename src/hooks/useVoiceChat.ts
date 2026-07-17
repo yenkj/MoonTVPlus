@@ -665,7 +665,10 @@ export function useVoiceChat({
             console.log('[VoiceChat] WebRTC mode - initiating peer connections');
 
             // 向房间内的其他成员发起连接
-            const otherMembers = members.filter(m => m.id !== socket.id);
+            let otherMembers = members;  
+            if ('io' in socket) {  
+              otherMembers = members.filter(m => m.id !== socket.id);  
+            }  
             console.log('[VoiceChat] Found', otherMembers.length, 'other members, initiating connections');
 
             if (otherMembers.length > 0) {
