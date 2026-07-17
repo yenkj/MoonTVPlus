@@ -223,11 +223,16 @@ export class SynctvWebSocketClient {
     this.eventHandlers.get(event)!.add(handler);
   }
 
-  // 移除事件监听
-  off(event: string, handler: SynctvEventHandler) {
+  // 移除事件监听（handler 可选，如果不提供则移除该事件的所有监听器）
+  off(event: string, handler?: SynctvEventHandler) {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
-      handlers.delete(handler);
+      if (handler) {
+        handlers.delete(handler);
+      } else {
+        // 如果没有提供 handler，清除该事件的所有监听器
+        handlers.clear();
+      }
     }
   }
 
