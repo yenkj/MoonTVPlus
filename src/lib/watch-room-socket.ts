@@ -205,9 +205,13 @@ class WatchRoomSocketManager {
       this.socket.off('disconnect');
       this.socket.off('error');
       this.socket.off('heartbeat:pong');
-      this.socket.io.off('reconnect_attempt');
-      this.socket.io.off('reconnect');
-      this.socket.io.off('reconnect_failed');
+
+      // 只在 Socket.IO 时移除 Manager 级别的事件监听器
+      if ('io' in this.socket) {
+        this.socket.io.off('reconnect_attempt');
+        this.socket.io.off('reconnect');
+        this.socket.io.off('reconnect_failed');
+      }
 
       this.socket.disconnect();
       this.socket = null;
