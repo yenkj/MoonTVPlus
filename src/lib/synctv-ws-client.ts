@@ -33,7 +33,20 @@ export class SynctvWebSocketClient {
     this.id = Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15);
   }
 
-  async connect(config: SynctvWSConfig): Promise<void> {
+  // 重载签名：无参数版本（用于重新连接）
+  connect(): Promise<void>;
+  // 重载签名：带配置参数版本（首次连接）
+  connect(config: SynctvWSConfig): Promise<void>;
+  // 实际实现
+  async connect(config?: SynctvWSConfig): Promise<void> {
+    // 如果没有提供 config，使用之前保存的配置（重新连接）
+    if (!config) {
+      if (this.config) {
+        return this.connect(this.config);
+      }
+      throw new Error('No previous config available for reconnection');
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
