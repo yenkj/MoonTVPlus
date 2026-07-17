@@ -25,6 +25,14 @@ export class SynctvWebSocketClient {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private isConnected = false;
 
+  // Socket ID（兼容 Socket.IO 的 id 属性）
+  readonly id: string;
+
+  constructor() {
+    // 生成类似 Socket.IO 的 ID 格式（例如：TzgZ5-h8h8h8h8）
+    this.id = Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15);
+  }
+
   async connect(config: SynctvWSConfig): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
@@ -111,13 +119,14 @@ export class SynctvWebSocketClient {
       const { event, data } = adapted;
 
       // 触发事件处理器
-      this.emit(event, data);
+      this.triggerHandlers(event, data);
     } catch (error) {
       console.error('[synctv-ws] Error handling message:', error);
     }
   }
 
-  private emit(event: string, data: any) {
+  // 触发内部事件处理器（私有方法）
+  private triggerHandlers(event: string, data: any) {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach(handler => {
@@ -195,6 +204,17 @@ export class SynctvWebSocketClient {
     this.ws.send(message);
   }
 
+  // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
+  emit(event: string, data: any, callback?: (response: any) => void) {
+    this.send(event, data);
+
+    // 如果有回调，模拟 Socket.IO 的回调行为
+    // 注意：synctv 是异步的，回调可能不会被调用
+    if (callback) {
+      console.warn('[synctv-ws] Callback parameter in emit() is not supported in synctv mode');
+    }
+  }
+
   // 监听事件
   on(event: string, handler: SynctvEventHandler) {
     if (!this.eventHandlers.has(event)) {
@@ -225,5 +245,10 @@ export class SynctvWebSocketClient {
   // 获取连接状态
   getConnected(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  // connected 属性（用于兼容 Socket.IO 接口）
+  get connected(): boolean {
+    return this.getConnected();
   }
 }
