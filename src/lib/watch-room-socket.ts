@@ -51,7 +51,7 @@ class WatchRoomSocketManager {
             resolve(this.socket!);
           });
 
-          this.socket!.once('connect_error', (error) => {
+          this.socket!.once('connect_error', (error: Error) => {
             clearTimeout(timeout);
             this.connectionPromise = null;
             reject(error);
@@ -238,12 +238,12 @@ class WatchRoomSocketManager {
       this.lastHeartbeatResponse = Date.now();
     });
 
-    this.socket.on('disconnect', (reason) => {
+    this.socket.on('disconnect', (reason: string) => {
       // eslint-disable-next-line no-console
       console.log('[WatchRoom] Socket disconnected:', reason);
     });
 
-    this.socket.on('error', (error) => {
+    this.socket.on('error', (error: Error) => {
       // eslint-disable-next-line no-console
       console.error('[WatchRoom] Socket error:', error);
     });
@@ -253,27 +253,30 @@ class WatchRoomSocketManager {
       this.lastHeartbeatResponse = Date.now();
     });
 
-    // 监听重连尝试
-    this.socket.io.on('reconnect_attempt', (attemptNumber) => {
-      // eslint-disable-next-line no-console
-      console.log('[WatchRoom] Reconnect attempt:', attemptNumber);
-    });
+    // 只在 Socket.IO 时监听 Manager 级别的重连事件
+    if ('io' in this.socket) {
+      // 监听重连尝试
+      this.socket.io.on('reconnect_attempt', (attemptNumber: number) => {
+        // eslint-disable-next-line no-console
+        console.log('[WatchRoom] Reconnect attempt:', attemptNumber);
+      });
 
-    // 监听重连成功
-    this.socket.io.on('reconnect', (attemptNumber) => {
-      // eslint-disable-next-line no-console
-      console.log('[WatchRoom] Reconnected after', attemptNumber, 'attempts');
-      // 重置心跳响应时间
-      this.lastHeartbeatResponse = Date.now();
-      this.reconnectSuccessCallback?.();
-    });
+      // 监听重连成功
+      this.socket.io.on('reconnect', (attemptNumber: number) => {
+        // eslint-disable-next-line no-console
+        console.log('[WatchRoom] Reconnected after', attemptNumber, 'attempts');
+        // 重置心跳响应时间
+        this.lastHeartbeatResponse = Date.now();
+        this.reconnectSuccessCallback?.();
+      });
 
-    // 监听重连失败
-    this.socket.io.on('reconnect_failed', () => {
-      // eslint-disable-next-line no-console
-      console.error('[WatchRoom] Reconnect failed after all attempts');
-      this.reconnectFailedCallback?.();
-    });
+      // 监听重连失败
+      this.socket.io.on('reconnect_failed', () => {
+        // eslint-disable-next-line no-console
+        console.error('[WatchRoom] Reconnect failed after all attempts');
+        this.reconnectFailedCallback?.();
+      });
+    }
   }
 
   private startHeartbeat() {
