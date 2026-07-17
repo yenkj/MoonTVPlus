@@ -723,6 +723,12 @@ export function useVoiceChat({
     };
   }, [isSpeakerEnabled, playRemoteStream]);
 
+  // 处理其他用户开启麦克风的通知
+  const handleMicEnabled = useCallback((data: { userId: string }) => {
+    console.log('[VoiceChat] User', data.userId, 'enabled microphone');
+    // 其他用户开启了麦克风，我们不需要做任何事，等待接收他们的offer即可
+  }, []);
+
   // 监听Socket.IO事件
   useEffect(() => {
     if (!socket) return;
@@ -733,10 +739,7 @@ export function useVoiceChat({
     socket.on('voice:ice', handleIceCandidate);
 
     // 监听其他用户开启麦克风的通知
-    socket.on('voice:mic-enabled', (data: { userId: string }) => {
-      console.log('[VoiceChat] User', data.userId, 'enabled microphone');
-      // 其他用户开启了麦克风，我们不需要做任何事，等待接收他们的offer即可
-    });
+    socket.on('voice:mic-enabled', handleMicEnabled);
 
     // 服务器中转事件
     const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {
@@ -748,18 +751,19 @@ export function useVoiceChat({
       if (strategy === 'server-only' || !peerConnectionsRef.current.has(data.userId)) {
         // 只有在服务器中转模式或WebRTC连接失败时才播放服务器中转的音频
         playServerRelayAudio(data.userId, data.audioData, data.sampleRate || 16000);
-      }  
+      }
     };
+
     socket.on('voice:audio-chunk', handleAudioChunk);
 
     return () => {
       socket.off('voice:offer', handleOffer);
       socket.off('voice:answer', handleAnswer);
       socket.off('voice:ice', handleIceCandidate);
-      socket.off('voice:mic-enabled');
+      socket.off('voice:mic-enabled', handleMicEnabled);
       socket.off('voice:audio-chunk', handleAudioChunk);
     };
-  }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, playServerRelayAudio]);
+  }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, handleMicEnabled, playServerRelayAudio]);
 
   // 监听房间成员变化 - 处理新成员加入的情况
   useEffect(() => {
@@ -767,7 +771,7 @@ export function useVoiceChat({
     if (strategy !== 'webrtc-fallback' || !isMicEnabled || !localStreamRef.current || !socket) {
       return;
     }
-  
+
     // 检查是否有新成员加入
     const currentPeerIds = Array.from(peerConnectionsRef.current.keys());
     let memberIds = members.map(m => m.id);
