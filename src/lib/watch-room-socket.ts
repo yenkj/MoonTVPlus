@@ -243,7 +243,7 @@ class WatchRoomSocketManager {
       console.log('[WatchRoom] Socket disconnected:', reason);
     });
 
-    this.socket.on('error', (error: Error) => {
+    this.socket.on('error', (error: any) => {
       // eslint-disable-next-line no-console
       console.error('[WatchRoom] Socket error:', error);
     });
