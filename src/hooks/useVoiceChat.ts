@@ -310,13 +310,15 @@ export function useVoiceChat({
 
     // 创建offer
     try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      socket.emit('voice:offer', {
-        targetUserId: peerId,
-        offer: offer,
-      });
+      const offer = await pc.createOffer();  
+      await pc.setLocalDescription(offer);  
+  
+      if ('io' in socket) {  
+        socket.emit('voice:offer', {  
+          targetUserId: peerId,  
+          offer: offer,  
+        });  
+      }
       console.log('[VoiceChat] Sent offer to', peerId);
     } catch (err) {
       console.error('[VoiceChat] Failed to create offer:', err);
@@ -343,14 +345,16 @@ export function useVoiceChat({
     }
 
     try {
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit('voice:answer', {
-        targetUserId: data.userId,
-        answer: answer,
-      });
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));  
+      const answer = await pc.createAnswer();  
+      await pc.setLocalDescription(answer);  
+  
+      if ('io' in socket) {  
+        socket.emit('voice:answer', {  
+          targetUserId: data.userId,  
+          answer: answer,  
+        });  
+      }
       console.log('[VoiceChat] Sent answer to', data.userId);
     } catch (err) {
       console.error('[VoiceChat] Failed to handle offer:', err);
@@ -452,12 +456,13 @@ export function useVoiceChat({
         }
 
         // 发送PCM数据到服务器
-        socket.emit('voice:audio-chunk', {
-          roomId: currentRoomId,
-          audioData: Array.from(new Uint8Array(pcmData.buffer)),
-          sampleRate: 16000,
-        });
-      };
+        if ('io' in socket) {  
+          socket.emit('voice:audio-chunk', {  
+            roomId: currentRoomId,  
+            audioData: Array.from(new Uint8Array(pcmData.buffer)),  
+            sampleRate: 16000,  
+          });  
+        }
 
       source.connect(processor);
 
