@@ -1,637 +1,254 @@
-// React Hook for Watch Room
-'use client';
+/**
+ * synctv WebSocket 客户端
+ * 用于连接 synctv 服务器，提供稳定的实时通信
+ */
 
-import { useCallback, useEffect, useRef,useState } from 'react';
+import { adaptEventFromSynctv, adaptEventToSynctv, parseSynctvMessage } from './synctv-adapter';
 
-import { type WatchRoomSocket,watchRoomSocketManager } from '@/lib/watch-room-socket';
+export interface SynctvWSConfig {
+  url: string;
+  token: string;
+  roomId?: string;
+}
 
-import type {
-  ChatMessage,
-  LiveState,
-  Member,
-  MusicSyncState,
-  PlayState,
-  Room,
-  RoomType,
-  ScreenState,
-  StoredRoomInfo,
-  WatchRoomConfig,
-} from '@/types/watch-room';
+// 使用与 Socket.IO 兼容的事件处理器签名
+export type SynctvEventHandler = (data: any) => void;
 
-const STORAGE_KEY = 'watch_room_info';
+export class SynctvWebSocketClient {
+  private ws: WebSocket | null = null;
+  private config: SynctvWSConfig | null = null;
+  private eventHandlers: Map<string, Set<SynctvEventHandler>> = new Map();
+  private connectionPromise: Promise<void> | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 10;
+  private reconnectDelay = 2000;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private isConnected = false;
 
-export function useWatchRoom(
-  onRoomDeleted?: (data?: { reason?: string }) => void,
-  onStateCleared?: () => void
-) {
-  const [socket, setSocket] = useState<WatchRoomSocket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [isOwner, setIsOwner] = useState(false);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const rejoinInFlightRef = useRef(false);
+  // Socket ID（兼容 Socket.IO 的 id 属性）
+  readonly id: string;
 
-  // 重新加入房间（自动重连）
-  const rejoinRoom = useCallback(async (info: StoredRoomInfo) => {
-    if (rejoinInFlightRef.current) {
+  constructor() {
+    // 生成类似 Socket.IO 的 ID 格式（例如：TzgZ5-h8h8h8h8）
+    this.id = Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15);
+  }
+
+  async connect(config: SynctvWSConfig): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
 
-    rejoinInFlightRef.current = true;
-    console.log('[WatchRoom] Auto-rejoining room:', info);
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.config = config;
+
+    this.connectionPromise = new Promise((resolve, reject) => {
+      try {
+        // 构建 WebSocket URL
+        const wsUrl = this.buildWebSocketUrl(config);
+
+        // 创建 WebSocket 连接
+        this.ws = new WebSocket(wsUrl, [config.token]);
+
+        this.ws.onopen = () => {
+          console.log('[synctv-ws] Connected to synctv server');
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+          this.startHeartbeat();
+          resolve();
+        };
+
+        this.ws.onmessage = (event) => {
+          this.handleMessage(event.data);
+        };
+
+        this.ws.onerror = (error) => {
+          console.error('[synctv-ws] WebSocket error:', error);
+          if (!this.isConnected) {
+            reject(new Error('Connection failed'));
+          }
+        };
+
+        this.ws.onclose = () => {
+          console.log('[synctv-ws] Disconnected from synctv server');
+          this.isConnected = false;
+          this.stopHeartbeat();
+          this.handleReconnect();
+        };
+
+      } catch (error) {
+        console.error('[synctv-ws] Failed to create WebSocket:', error);
+        reject(error);
+      }
+    });
+
+    return this.connectionPromise;
+  }
+
+  private buildWebSocketUrl(config: SynctvWSConfig): string {
+    const url = new URL(config.url);
+    // 将 http/https 转换为 ws/wss
+    if (url.protocol === 'http:') {
+      url.protocol = 'ws:';
+    } else if (url.protocol === 'https:') {
+      url.protocol = 'wss:';
+    }
+    // synctv WebSocket 路径
+    url.pathname = '/api/room/ws';
+    return url.toString();
+  }
+
+  private handleMessage(message: string) {
     try {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !watchRoomSocketManager.isConnected()) {
-        console.error('[WatchRoom] Not connected, cannot rejoin');
+      const parsed = parseSynctvMessage(message);
+      if (!parsed) {
+        console.warn('[synctv-ws] Failed to parse message:', message);
         return;
       }
 
-      const result = await new Promise<{ room: Room; members: Member[] }>((resolve, reject) => {
-        sock.emit('room:join', {
-          roomId: info.roomId,
-          password: info.password,
-          userName: info.userName,
-          ownerToken: info.ownerToken, // 发送房主令牌
-        }, (response) => {
-          if (response.success && response.room && response.members) {
-            resolve({ room: response.room, members: response.members });
-          } else {
-            reject(new Error(response.error || '重新加入房间失败'));
-          }
-        });
-      });
-
-      setCurrentRoom(result.room);
-      setMembers(result.members);
-      // 根据服务器返回的 room.ownerId 判断是否是房主
-      setIsOwner(result.room.ownerId === sock.id);
-      console.log('[WatchRoom] Successfully rejoined room:', result.room.name);
-    } catch (error) {
-      console.error('[WatchRoom] Failed to rejoin room:', error);
-      clearStoredRoomInfo();
-    } finally {
-      rejoinInFlightRef.current = false;
-    }
-  }, []);
-
-  const scheduleRejoin = useCallback((info: StoredRoomInfo, delay = 300) => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-
-    reconnectTimeoutRef.current = setTimeout(() => {
-      rejoinRoom(info);
-    }, delay);
-  }, [rejoinRoom]);
-
-  // 连接到服务器
-  const connect = useCallback(async (config: WatchRoomConfig) => {
-    try {
-      const sock = await watchRoomSocketManager.connect(config);
-      setSocket(sock);
-      setIsConnected(true);
-
-      // 尝试自动重连房间
-      const storedInfo = getStoredRoomInfo();
-      if (storedInfo) {
-        console.log('[WatchRoom] Attempting to reconnect to room:', storedInfo.roomId);
-        scheduleRejoin(storedInfo);
+      // 将 synctv 事件转换为 MoonTVPlus 事件
+      const adapted = adaptEventFromSynctv(parsed.event, parsed.data);
+      
+      // 如果返回 null，表示该事件被忽略
+      if (!adapted) {
+        return;
       }
+
+      const { event, data } = adapted;
+
+      // 触发事件处理器
+      this.triggerHandlers(event, data);
     } catch (error) {
-      console.error('[WatchRoom] Failed to connect:', error);
-      setIsConnected(false);
+      console.error('[synctv-ws] Error handling message:', error);
     }
-  }, [scheduleRejoin]);
+  }
+
+  // 触发内部事件处理器（私有方法）
+  private triggerHandlers(event: string, data: any) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          // 只传递 data，与 Socket.IO 的签名一致
+          handler(data);
+        } catch (error) {
+          console.error(`[synctv-ws] Error in event handler for ${event}:`, error);
+        }
+      });
+    }
+  }
+
+  private async handleReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[synctv-ws] Max reconnect attempts reached');
+      return;
+    }
+
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * this.reconnectAttempts;
+
+    console.log(`[synctv-ws] Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    if (this.config) {
+      try {
+        await this.connect(this.config);
+      } catch (error) {
+        console.error('[synctv-ws] Reconnect failed:', error);
+      }
+    }
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.send('heartbeat', {});
+      }
+    }, 10000); // 每10秒发送心跳
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  // 发送事件（send 方法）
+  send(event: string, data?: any) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[synctv-ws] WebSocket is not connected');
+      return;
+    }
+
+    // 将 MoonTVPlus 事件转换为 synctv 事件
+    const adapted = adaptEventToSynctv(event, data);
+
+    // 如果返回 null，表示该事件不应转发到 synctv
+    if (!adapted) {
+      return;
+    }
+
+    const { event: synctvEvent, data: synctvData } = adapted;
+
+    const message = JSON.stringify({
+      type: synctvEvent,
+      payload: synctvData,
+    });
+
+    this.ws.send(message);
+  }
+
+  // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
+  emit(event: string, data?: any, callback?: (response: any) => void) {
+    this.send(event, data);
+
+    // 如果有回调，模拟 Socket.IO 的回调行为
+    // 注意：synctv 是异步的，回调可能不会被调用
+    if (callback) {
+      console.warn('[synctv-ws] Callback parameter in emit() is not supported in synctv mode');
+    }
+  }
+
+  // 监听事件
+  on(event: string, handler: SynctvEventHandler) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, new Set());
+    }
+    this.eventHandlers.get(event)!.add(handler);
+  }
+
+  // 移除事件监听
+  off(event: string, handler: SynctvEventHandler) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.delete(handler);
+    }
+  }
 
   // 断开连接
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+  disconnect() {
+    this.stopHeartbeat();
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
-    watchRoomSocketManager.disconnect();
-    setSocket(null);
-    setIsConnected(false);
-    setCurrentRoom(null);
-    setMembers([]);
-    setChatMessages([]);
-    setIsOwner(false);
-  }, []);
-
-  // 创建房间
-  const createRoom = useCallback(
-    async (data: { name: string; description: string; password?: string; isPublic: boolean; roomType: RoomType; userName: string }) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !watchRoomSocketManager.isConnected()) {
-        throw new Error('Not connected');
-      }
-
-      return new Promise<Room>((resolve, reject) => {
-        sock.emit('room:create', data, (response) => {
-          if (response.success && response.room) {
-            setCurrentRoom(response.room);
-            setIsOwner(true);
-            // 创建房间时，手动设置房主的成员信息
-            setMembers([{
-              id: sock.id!,
-              name: data.userName,
-              isOwner: true,
-              lastHeartbeat: Date.now(),
-            }]);
-            storeRoomInfo({
-              roomId: response.room.id,
-              roomName: response.room.name,
-              isOwner: true,
-              userName: data.userName,
-              password: data.password,
-              ownerToken: response.room.ownerToken, // 保存房主令牌
-              timestamp: Date.now(),
-            });
-            resolve(response.room);
-          } else {
-            reject(new Error(response.error || '创建房间失败'));
-          }
-        });
-      });
-    },
-    []
-  );
-
-  // 加入房间
-  const joinRoom = useCallback(
-    async (data: { roomId: string; password?: string; userName: string; ownerToken?: string }) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !watchRoomSocketManager.isConnected()) {
-        throw new Error('Not connected');
-      }
-
-      return new Promise<{ room: Room; members: Member[] }>((resolve, reject) => {
-        sock.emit('room:join', data, (response) => {
-          if (response.success && response.room && response.members) {
-            setCurrentRoom(response.room);
-            setMembers(response.members);
-            // 根据服务器返回的 room.ownerId 判断是否是房主
-            const isRoomOwner = response.room.ownerId === sock.id;
-            setIsOwner(isRoomOwner);
-            storeRoomInfo({
-              roomId: response.room.id,
-              roomName: response.room.name,
-              isOwner: isRoomOwner,
-              userName: data.userName,
-              password: data.password,
-              ownerToken: isRoomOwner ? (response.room.ownerToken || data.ownerToken) : undefined,
-              timestamp: Date.now(),
-            });
-            resolve({ room: response.room, members: response.members });
-          } else {
-            reject(new Error(response.error || '加入房间失败'));
-          }
-        });
-      });
-    },
-    []
-  );
-
-  // 离开房间
-  const leaveRoom = useCallback(() => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock) return;
-
-    sock.emit('room:leave');
-    setCurrentRoom(null);
-    setMembers([]);
-    setChatMessages([]);
-    setIsOwner(false);
-    clearStoredRoomInfo();
-  }, []);
-
-  // 获取房间列表
-  const getRoomList = useCallback(async (): Promise<Room[]> => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock || !watchRoomSocketManager.isConnected()) {
-      throw new Error('Not connected');
-    }
-
-    return new Promise((resolve) => {
-      sock.emit('room:list', (rooms: Room[]) => {
-        resolve(rooms);
-      });
-    });
-  }, []);
-
-  // 发送聊天消息
-  const sendChatMessage = useCallback(
-    (content: string, type: 'text' | 'emoji' = 'text') => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !currentRoom) return;
-
-      sock.emit('chat:message', { content, type });
-    },
-    [currentRoom]
-  );
-
-  // 更新播放状态
-  const updatePlayState = useCallback(
-    (state: PlayState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) {
-        console.log('[WatchRoom] Cannot update play state:', { hasSocket: !!sock, isOwner });
-        return;
-      }
-
-      console.log('[WatchRoom] Emitting play:update with state:', state);
-      sock.emit('play:update', state);
-    },
-    [isOwner]
-  );
-
-  // 跳转播放进度
-  const seekPlayback = useCallback(
-    (currentTime: number) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock) {
-        console.log('[WatchRoom] Cannot seek - no socket');
-        return;
-      }
-
-      console.log('[WatchRoom] Emitting play:seek with time:', currentTime);
-      sock.emit('play:seek', currentTime);
-    },
-    []
-  );
-
-  // 播放
-  const play = useCallback(() => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock) {
-      console.log('[WatchRoom] Cannot play - no socket');
-      return;
-    }
-
-    console.log('[WatchRoom] Emitting play:play');
-    sock.emit('play:play');
-  }, []);
-
-  // 暂停
-  const pause = useCallback(() => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock) {
-      console.log('[WatchRoom] Cannot pause - no socket');
-      return;
-    }
-
-    console.log('[WatchRoom] Emitting play:pause');
-    sock.emit('play:pause');
-  }, []);
-
-  // 切换视频
-  const changeVideo = useCallback(
-    (state: PlayState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock) {
-        console.log('[WatchRoom] Cannot change video - no socket');
-        return;
-      }
-      if (!isOwner) {
-        console.log('[WatchRoom] Cannot change video - not owner');
-        return;
-      }
-
-      console.log('[WatchRoom] Emitting play:change with state:', state);
-      sock.emit('play:change', state);
-    },
-    [isOwner]
-  );
-
-  // 切换直播频道
-  const changeLiveChannel = useCallback(
-    (state: LiveState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('live:change', state);
-    },
-    [isOwner]
-  );
-
-  // 开始屏幕共享
-  const startScreenShare = useCallback(
-    (state: ScreenState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('screen:start', state);
-    },
-    [isOwner]
-  );
-
-  // 停止屏幕共享
-  const stopScreenShare = useCallback(() => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock || !isOwner) return;
-
-    sock.emit('screen:stop');
-  }, [isOwner]);
-
-  const changeMusic = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:change', state);
-    },
-    [isOwner]
-  );
-
-  const updateMusicState = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:update', state);
-    },
-    [isOwner]
-  );
-
-  const updateMusicQueue = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:update', state);
-    },
-    [isOwner]
-  );
-
-  const playMusic = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:play', state);
-    },
-    [isOwner]
-  );
-
-  const pauseMusic = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:pause', state);
-    },
-    [isOwner]
-  );
-
-  const seekMusic = useCallback(
-    (state: MusicSyncState) => {
-      const sock = watchRoomSocketManager.getSocket();
-      if (!sock || !isOwner) return;
-
-      sock.emit('music:seek', state);
-    },
-    [isOwner]
-  );
-
-  // 清除房间播放状态（房主离开播放/直播页面时调用）
-  const clearRoomState = useCallback(() => {
-    const sock = watchRoomSocketManager.getSocket();
-    if (!sock) {
-      console.log('[WatchRoom] Cannot clear state - no socket');
-      return;
-    }
-    if (!isOwner) {
-      console.log('[WatchRoom] Cannot clear state - not owner');
-      return;
-    }
-
-    console.log('[WatchRoom] Emitting state:clear');
-    sock.emit('state:clear');
-  }, [isOwner]);
-
-  // 设置事件监听
-  useEffect(() => {
-    if (!socket) return;
-
-    // 房间事件
-    socket.on('room:joined', (data) => {
-      setCurrentRoom(data.room);
-      setMembers(data.members);
-    });
-
-    socket.on('room:member-joined', (member) => {
-      setMembers((prev) => {
-        const next = prev.filter((existing) => existing.id !== member.id);
-        next.push(member);
-        return next;
-      });
-    });
-
-    socket.on('room:member-left', (userId) => {
-      setMembers((prev) => prev.filter((m) => m.id !== userId));
-    });
-
-    socket.on('room:deleted', (data?: { reason?: string }) => {
-      console.log('[WatchRoom] Room deleted:', data);
-
-      // 调用回调显示Toast
-      onRoomDeleted?.(data);
-
-      setCurrentRoom(null);
-      setMembers([]);
-      setChatMessages([]);
-      clearStoredRoomInfo();
-    });
-
-    // 播放事件
-    socket.on('play:update', (state) => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
-      }
-    });
-
-    // 视频切换事件（换集、换源）
-    socket.on('play:change', (state) => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
-      }
-    });
-
-    // 直播频道切换事件
-    socket.on('live:change', (state) => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
-      }
-    });
-
-    // 屏幕共享事件
-    socket.on('screen:start', (state) => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
-      }
-    });
-
-    socket.on('screen:stop', () => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: null } : null));
-      }
-    });
-
-    const handleMusicState = (state: MusicSyncState) => {
-      if (currentRoom) {
-        setCurrentRoom((prev) => (prev ? { ...prev, currentState: state } : null));
-      }
-    };
-
-    socket.on('music:change', handleMusicState);
-    socket.on('music:update', handleMusicState);
-    socket.on('music:queue', handleMusicState);
-    socket.on('music:play', (state) => {
-      setCurrentRoom((prev) => {
-        if (!prev || prev.currentState?.type !== 'music') return prev;
-        return {
-          ...prev,
-          currentState: { ...prev.currentState, ...state, isPlaying: true },
-        };
-      });
-    });
-    socket.on('music:pause', (state) => {
-      setCurrentRoom((prev) => {
-        if (!prev || prev.currentState?.type !== 'music') return prev;
-        return {
-          ...prev,
-          currentState: { ...prev.currentState, ...state, isPlaying: false },
-        };
-      });
-    });
-    socket.on('music:seek', (state) => {
-      setCurrentRoom((prev) => {
-        if (!prev || prev.currentState?.type !== 'music') return prev;
-        return {
-          ...prev,
-          currentState: { ...prev.currentState, ...state },
-        };
-      });
-    });
-
-    // 聊天事件
-    socket.on('chat:message', (message) => {
-      setChatMessages((prev) => [...prev, message]);
-    });
-
-    // 状态清除事件（房主心跳超时）
-    socket.on('state:cleared', () => {
-      console.log('[WatchRoom] Room state cleared by server (owner inactive)');
-
-      // 清除当前房间的播放/直播状态
-      setCurrentRoom((prev) => (prev ? { ...prev, currentState: null } : null));
-
-      // 调用回调显示Toast
-      onStateCleared?.();
-    });
-
-    // 连接状态
-    socket.on('connect', () => {
-      setIsConnected(true);
-      const storedInfo = getStoredRoomInfo();
-      if (storedInfo) {
-        scheduleRejoin(storedInfo);
-      }
-    });
-
-    socket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    return () => {
-      socket.off('room:joined');
-      socket.off('room:member-joined');
-      socket.off('room:member-left');
-      socket.off('room:deleted');
-      socket.off('play:update');
-      socket.off('play:change');
-      socket.off('live:change');
-      socket.off('screen:start');
-      socket.off('screen:stop');
-      socket.off('music:change');
-      socket.off('music:update');
-      socket.off('music:queue');
-      socket.off('music:play');
-      socket.off('music:pause');
-      socket.off('music:seek');
-      socket.off('chat:message');
-      socket.off('state:cleared');
-      socket.off('connect');
-      socket.off('disconnect');
-    };
-  }, [socket, currentRoom, onRoomDeleted, onStateCleared, scheduleRejoin]);
-
-  // 清理
-  useEffect(() => {
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  return {
-    socket,
-    isConnected,
-    currentRoom,
-    members,
-    chatMessages,
-    isOwner,
-    connect,
-    disconnect,
-    createRoom,
-    joinRoom,
-    leaveRoom,
-    getRoomList,
-    sendChatMessage,
-    updatePlayState,
-    seekPlayback,
-    play,
-    pause,
-    changeVideo,
-    changeLiveChannel,
-    startScreenShare,
-    stopScreenShare,
-    changeMusic,
-    updateMusicState,
-    updateMusicQueue,
-    playMusic,
-    pauseMusic,
-    seekMusic,
-    clearRoomState,
-  };
-}
-
-// 存储房间信息到 localStorage
-function storeRoomInfo(info: StoredRoomInfo) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(info));
-}
-
-// 获取存储的房间信息
-function getStoredRoomInfo(): StoredRoomInfo | null {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return null;
-
-  try {
-    const info: StoredRoomInfo = JSON.parse(stored);
-    // 检查是否过期（24小时）
-    if (Date.now() - info.timestamp > 24 * 60 * 60 * 1000) {
-      clearStoredRoomInfo();
-      return null;
-    }
-    return info;
-  } catch {
-    return null;
+    this.isConnected = false;
+    this.connectionPromise = null;
   }
-}
 
-// 清除存储的房间信息
-function clearStoredRoomInfo() {
-  localStorage.removeItem(STORAGE_KEY);
+  // 获取连接状态
+  getConnected(): boolean {
+    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  // connected 属性（用于兼容 Socket.IO 接口）
+  get connected(): boolean {
+    return this.getConnected();
+  }
 }
