@@ -122,15 +122,15 @@ export function useVoiceChat({
     const pc = new RTCPeerConnection({ iceServers });
 
     // ICE候选收集
-    pc.onicecandidate = (event) => {  
-      if (event.candidate && socket) {  
-        if ('io' in socket) {  
-          socket.emit('voice:ice', {  
-            targetUserId: peerId,  
-            candidate: event.candidate.toJSON(),  
-          });  
-        }  
-      }  
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socket) {
+        if ('io' in socket) {
+          socket.emit('voice:ice', {
+            targetUserId: peerId,
+            candidate: event.candidate.toJSON(),
+          });
+        }
+      }
     };
 
     // 接收远程音频流
@@ -310,14 +310,14 @@ export function useVoiceChat({
 
     // 创建offer
     try {
-      const offer = await pc.createOffer();  
-      await pc.setLocalDescription(offer);  
-  
-      if ('io' in socket) {  
-        socket.emit('voice:offer', {  
-          targetUserId: peerId,  
-          offer: offer,  
-        });  
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      if ('io' in socket) {
+        socket.emit('voice:offer', {
+          targetUserId: peerId,
+          offer: offer,
+        });
       }
       console.log('[VoiceChat] Sent offer to', peerId);
     } catch (err) {
@@ -345,15 +345,15 @@ export function useVoiceChat({
     }
 
     try {
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));  
-      const answer = await pc.createAnswer();  
-      await pc.setLocalDescription(answer);  
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
   
-      if ('io' in socket) {  
-        socket.emit('voice:answer', {  
-          targetUserId: data.userId,  
-          answer: answer,  
-        });  
+      if ('io' in socket) {
+        socket.emit('voice:answer', {
+          targetUserId: data.userId,
+          answer: answer,
+        });
       }
       console.log('[VoiceChat] Sent answer to', data.userId);
     } catch (err) {
@@ -414,24 +414,24 @@ export function useVoiceChat({
       // 保存roomId的引用，避免闭包问题
       const currentRoomId = roomId;
         
-      processor.onaudioprocess = (e) => {  
-        if (!socket) {  
-          return;  
-        }  
+      processor.onaudioprocess = (e) => {
+        if (!socket) {
+          return;
+        }
     
-        // 检查连接状态  
-        if ('io' in socket) {  
-          // Socket.IO 客户端  
-          if (!socket.connected) {  
-            return;  
-          }  
-        } else {  
-          // SynctvWebSocketClient  
-          if (!socket.getConnected()) {  
-            return;  
-          }  
-        }  
-  
+        // 检查连接状态
+        if ('io' in socket) {
+          // Socket.IO 客户端
+          if (!socket.connected) {
+            return;
+          }
+        } else {
+          // SynctvWebSocketClient
+          if (!socket.getConnected()) {
+            return;
+          }
+        }
+
         const inputData = e.inputBuffer.getChannelData(0);
 
         // 计算音频能量，判断是否为有效数据
@@ -469,15 +469,15 @@ export function useVoiceChat({
         }
 
         // 发送PCM数据到服务器
-        if ('io' in socket) {    
-          socket.emit('voice:audio-chunk', {    
-            roomId: currentRoomId,    
-            audioData: Array.from(new Uint8Array(pcmData.buffer)),    
-            sampleRate: 16000,    
-          });    
-        }  
+        if ('io' in socket) {
+          socket.emit('voice:audio-chunk', {
+            roomId: currentRoomId,
+            audioData: Array.from(new Uint8Array(pcmData.buffer)),
+            sampleRate: 16000,
+          });
+        }
         };
-  
+
         source.connect(processor);
 
       // ScriptProcessorNode需要连接到某个节点才能触发onaudioprocess
@@ -665,9 +665,9 @@ export function useVoiceChat({
             console.log('[VoiceChat] WebRTC mode - initiating peer connections');
 
             // 向房间内的其他成员发起连接
-            let otherMembers = members;  
-            if ('io' in socket) {  
-              otherMembers = members.filter(m => m.id !== socket.id);  
+            let otherMembers = members;
+            if ('io' in socket) {
+              otherMembers = members.filter(m => m.id !== socket.id);
             }  
             console.log('[VoiceChat] Found', otherMembers.length, 'other members, initiating connections');
 
@@ -739,15 +739,15 @@ export function useVoiceChat({
     });
 
     // 服务器中转事件
-    const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {  
-      // 过滤掉自己发送的音频，避免回声  
-      if ('io' in socket && data.userId === socket.id) {  
-        return;  
-      }  
-  
-      if (strategy === 'server-only' || !peerConnectionsRef.current.has(data.userId)) {  
-        // 只有在服务器中转模式或WebRTC连接失败时才播放服务器中转的音频  
-        playServerRelayAudio(data.userId, data.audioData, data.sampleRate || 16000);  
+    const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {
+      // 过滤掉自己发送的音频，避免回声
+      if ('io' in socket && data.userId === socket.id) {
+        return;
+      }
+
+      if (strategy === 'server-only' || !peerConnectionsRef.current.has(data.userId)) {
+        // 只有在服务器中转模式或WebRTC连接失败时才播放服务器中转的音频
+        playServerRelayAudio(data.userId, data.audioData, data.sampleRate || 16000);
       }  
     };
     socket.on('voice:audio-chunk', handleAudioChunk);
@@ -762,32 +762,32 @@ export function useVoiceChat({
   }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, playServerRelayAudio]);
 
   // 监听房间成员变化 - 处理新成员加入的情况
-  useEffect(() => {  
-    // 只在WebRTC模式、麦克风开启、有本地流的情况下才处理  
-    if (strategy !== 'webrtc-fallback' || !isMicEnabled || !localStreamRef.current || !socket) {  
-      return;  
-    }  
+  useEffect(() => {
+    // 只在WebRTC模式、麦克风开启、有本地流的情况下才处理
+    if (strategy !== 'webrtc-fallback' || !isMicEnabled || !localStreamRef.current || !socket) {
+      return;
+    }
   
-    // 检查是否有新成员加入  
-    const currentPeerIds = Array.from(peerConnectionsRef.current.keys());  
-    let memberIds = members.map(m => m.id);  
-    if ('io' in socket) {  
-      memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);  
-    }  
-  
-    // 找出新加入的成员（在memberIds中但不在currentPeerIds中）  
-    const newMemberIds = memberIds.filter(id => !currentPeerIds.includes(id));  
-  
-    if (newMemberIds.length > 0) {  
-      console.log('[VoiceChat] New members joined, initiating connections:', newMemberIds);  
-      newMemberIds.forEach(memberId => {  
-        const member = members.find(m => m.id === memberId);  
-        if (member) {  
-          console.log('[VoiceChat] Initiating connection to new member:', member.name, member.id);  
-          initiateConnection(member.id);  
-        }  
-      });  
-    }  
+    // 检查是否有新成员加入
+    const currentPeerIds = Array.from(peerConnectionsRef.current.keys());
+    let memberIds = members.map(m => m.id);
+    if ('io' in socket) {
+      memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);
+    }
+
+    // 找出新加入的成员（在memberIds中但不在currentPeerIds中）
+    const newMemberIds = memberIds.filter(id => !currentPeerIds.includes(id));
+
+    if (newMemberIds.length > 0) {
+      console.log('[VoiceChat] New members joined, initiating connections:', newMemberIds);
+      newMemberIds.forEach(memberId => {
+        const member = members.find(m => m.id === memberId);
+        if (member) {
+          console.log('[VoiceChat] Initiating connection to new member:', member.name, member.id);
+          initiateConnection(member.id);
+        }
+      });
+    }
   }, [members, strategy, isMicEnabled, socket, initiateConnection]);
 
   // 房间变化时清理
