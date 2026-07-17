@@ -456,15 +456,16 @@ export function useVoiceChat({
         }
 
         // 发送PCM数据到服务器
-        if ('io' in socket) {  
-          socket.emit('voice:audio-chunk', {  
-            roomId: currentRoomId,  
-            audioData: Array.from(new Uint8Array(pcmData.buffer)),  
-            sampleRate: 16000,  
-          });  
-        }
-
-      source.connect(processor);
+        if ('io' in socket) {    
+          socket.emit('voice:audio-chunk', {    
+            roomId: currentRoomId,    
+            audioData: Array.from(new Uint8Array(pcmData.buffer)),    
+            sampleRate: 16000,    
+          });    
+        }  
+        };
+  
+        source.connect(processor);
 
       // ScriptProcessorNode需要连接到某个节点才能触发onaudioprocess
       // 但连接到destination会产生本地回声，所以创建一个静音的GainNode
