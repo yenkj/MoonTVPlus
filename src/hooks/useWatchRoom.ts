@@ -54,7 +54,7 @@ export function useWatchRoom(
           password: info.password,
           userName: info.userName,
           ownerToken: info.ownerToken, // 发送房主令牌
-        }, (response) => {
+        }, (response: { success: boolean; room?: Room; members?: Member[]; error?: string }) => {
           if (response.success && response.room && response.members) {
             resolve({ room: response.room, members: response.members });
           } else {
@@ -128,7 +128,7 @@ export function useWatchRoom(
       }
 
       return new Promise<Room>((resolve, reject) => {
-        sock.emit('room:create', data, (response) => {
+        sock.emit('room:create', data, (response: { success: boolean; room?: Room; error?: string }) => {
           if (response.success && response.room) {
             setCurrentRoom(response.room);
             setIsOwner(true);
@@ -167,7 +167,7 @@ export function useWatchRoom(
       }
 
       return new Promise<{ room: Room; members: Member[] }>((resolve, reject) => {
-        sock.emit('room:join', data, (response) => {
+        sock.emit('room:join', data, (response: { success: boolean; room?: Room; members?: Member[]; error?: string }) => {
           if (response.success && response.room && response.members) {
             setCurrentRoom(response.room);
             setMembers(response.members);
@@ -214,7 +214,7 @@ export function useWatchRoom(
     }
 
     return new Promise((resolve) => {
-      sock.emit('room:list', (rooms) => {
+      sock.emit('room:list', (rooms: Room[]) => {
         resolve(rooms);
       });
     });
