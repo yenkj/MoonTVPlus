@@ -166,12 +166,14 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
     try {
       const pc = createPeerConnection(memberId, true);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('screen:offer', {
-        targetUserId: memberId,
-        offer,
-      });
+      const offer = await pc.createOffer();  
+      await pc.setLocalDescription(offer);  
+      if ('io' in socket) {  
+        socket.emit('screen:offer', {  
+          targetUserId: memberId,  
+          offer,  
+        });  
+      }
     } catch (err) {
       console.error('[ScreenShare] Failed to send offer:', err);
       setError('无法建立屏幕共享连接');
@@ -245,10 +247,12 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('screen:answer', {
-          targetUserId: data.userId,
-          answer,
-        });
+        if ('io' in socket) {  
+          socket.emit('screen:answer', {  
+            targetUserId: data.userId,  
+            answer,  
+          });  
+        }
       } catch (err) {
         console.error('[ScreenShare] Failed to handle offer:', err);
         setError('接收共享画面失败');
