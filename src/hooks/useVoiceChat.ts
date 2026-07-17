@@ -739,18 +739,17 @@ export function useVoiceChat({
     });
 
     // 服务器中转事件
-    const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {
-      // 过滤掉自己发送的音频，避免回声
-      if (data.userId === socket.id) {
-        return;
-      }
-
-      if (strategy === 'server-only' || !peerConnectionsRef.current.has(data.userId)) {
-        // 只有在服务器中转模式或WebRTC连接失败时才播放服务器中转的音频
-        playServerRelayAudio(data.userId, data.audioData, data.sampleRate || 16000);
-      }
+    const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {  
+      // 过滤掉自己发送的音频，避免回声  
+      if ('io' in socket && data.userId === socket.id) {  
+        return;  
+      }  
+  
+      if (strategy === 'server-only' || !peerConnectionsRef.current.has(data.userId)) {  
+        // 只有在服务器中转模式或WebRTC连接失败时才播放服务器中转的音频  
+        playServerRelayAudio(data.userId, data.audioData, data.sampleRate || 16000);  
+      }  
     };
-
     socket.on('voice:audio-chunk', handleAudioChunk);
 
     return () => {
@@ -763,29 +762,32 @@ export function useVoiceChat({
   }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, playServerRelayAudio]);
 
   // 监听房间成员变化 - 处理新成员加入的情况
-  useEffect(() => {
-    // 只在WebRTC模式、麦克风开启、有本地流的情况下才处理
-    if (strategy !== 'webrtc-fallback' || !isMicEnabled || !localStreamRef.current || !socket) {
-      return;
-    }
-
-    // 检查是否有新成员加入
-    const currentPeerIds = Array.from(peerConnectionsRef.current.keys());
-    const memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);
-
-    // 找出新加入的成员（在memberIds中但不在currentPeerIds中）
-    const newMemberIds = memberIds.filter(id => !currentPeerIds.includes(id));
-
-    if (newMemberIds.length > 0) {
-      console.log('[VoiceChat] New members joined, initiating connections:', newMemberIds);
-      newMemberIds.forEach(memberId => {
-        const member = members.find(m => m.id === memberId);
-        if (member) {
-          console.log('[VoiceChat] Initiating connection to new member:', member.name, member.id);
-          initiateConnection(member.id);
-        }
-      });
-    }
+  useEffect(() => {  
+    // 只在WebRTC模式、麦克风开启、有本地流的情况下才处理  
+    if (strategy !== 'webrtc-fallback' || !isMicEnabled || !localStreamRef.current || !socket) {  
+      return;  
+    }  
+  
+    // 检查是否有新成员加入  
+    const currentPeerIds = Array.from(peerConnectionsRef.current.keys());  
+    let memberIds = members.map(m => m.id);  
+    if ('io' in socket) {  
+      memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);  
+    }  
+  
+    // 找出新加入的成员（在memberIds中但不在currentPeerIds中）  
+    const newMemberIds = memberIds.filter(id => !currentPeerIds.includes(id));  
+  
+    if (newMemberIds.length > 0) {  
+      console.log('[VoiceChat] New members joined, initiating connections:', newMemberIds);  
+      newMemberIds.forEach(memberId => {  
+        const member = members.find(m => m.id === memberId);  
+        if (member) {  
+          console.log('[VoiceChat] Initiating connection to new member:', member.name, member.id);  
+          initiateConnection(member.id);  
+        }  
+      });  
+    }  
   }, [members, strategy, isMicEnabled, socket, initiateConnection]);
 
   // 房间变化时清理
