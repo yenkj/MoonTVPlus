@@ -132,15 +132,15 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
     const pc = new RTCPeerConnection({ iceServers });
 
-    pc.onicecandidate = (event) => {  
-      if (event.candidate && socket) {  
-        if ('io' in socket) {  
-          socket.emit('screen:ice', {  
-            targetUserId: userId,  
-            candidate: event.candidate.toJSON(),  
-          });  
-        }  
-      }  
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socket) {
+        if ('io' in socket) {
+          socket.emit('screen:ice', {
+            targetUserId: userId,
+            candidate: event.candidate.toJSON(),
+          });
+        }
+      }
     };
 
     if (ownerMode && displayStreamRef.current) {
@@ -166,13 +166,13 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
     try {
       const pc = createPeerConnection(memberId, true);
-      const offer = await pc.createOffer();  
-      await pc.setLocalDescription(offer);  
-      if ('io' in socket) {  
-        socket.emit('screen:offer', {  
-          targetUserId: memberId,  
-          offer,  
-        });  
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if ('io' in socket) {
+        socket.emit('screen:offer', {
+          targetUserId: memberId,
+          offer,
+        });
       }
     } catch (err) {
       console.error('[ScreenShare] Failed to send offer:', err);
@@ -247,11 +247,11 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        if ('io' in socket) {  
-          socket.emit('screen:answer', {  
-            targetUserId: data.userId,  
-            answer,  
-          });  
+        if ('io' in socket) {
+          socket.emit('screen:answer', {
+            targetUserId: data.userId,
+            answer,
+          });
         }
       } catch (err) {
         console.error('[ScreenShare] Failed to handle offer:', err);
@@ -348,10 +348,10 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
   useEffect(() => {
     if (!socket || !currentRoom || isOwner || !isConnected) return;
-    if (currentState?.type !== 'screen' || currentState.status !== 'sharing') return;  
-  
-    if ('io' in socket) {  
-      socket.emit('screen:viewer-ready');  
+    if (currentState?.type !== 'screen' || currentState.status !== 'sharing') return;
+
+    if ('io' in socket) {
+      socket.emit('screen:viewer-ready');
     }
   }, [currentRoom, currentState, isConnected, isOwner, socket]);
 
