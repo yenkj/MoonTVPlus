@@ -413,12 +413,25 @@ export function useVoiceChat({
 
       // 保存roomId的引用，避免闭包问题
       const currentRoomId = roomId;
-
-      processor.onaudioprocess = (e) => {
-        if (!socket || !socket.connected) {
-          return;
-        }
-
+        
+      processor.onaudioprocess = (e) => {  
+        if (!socket) {  
+          return;  
+        }  
+    
+        // 检查连接状态  
+        if ('io' in socket) {  
+          // Socket.IO 客户端  
+          if (!socket.connected) {  
+            return;  
+          }  
+        } else {  
+          // SynctvWebSocketClient  
+          if (!socket.getConnected()) {  
+            return;  
+          }  
+        }  
+  
         const inputData = e.inputBuffer.getChannelData(0);
 
         // 计算音频能量，判断是否为有效数据
