@@ -122,13 +122,15 @@ export function useVoiceChat({
     const pc = new RTCPeerConnection({ iceServers });
 
     // ICE候选收集
-    pc.onicecandidate = (event) => {
-      if (event.candidate && socket) {
-        socket.emit('voice:ice', {
-          targetUserId: peerId,
-          candidate: event.candidate.toJSON(),
-        });
-      }
+    pc.onicecandidate = (event) => {  
+      if (event.candidate && socket) {  
+        if ('emit' in socket) {  
+          socket.emit('voice:ice', {  
+            targetUserId: peerId,  
+            candidate: event.candidate.toJSON(),  
+          });  
+        }  
+      }  
     };
 
     // 接收远程音频流
