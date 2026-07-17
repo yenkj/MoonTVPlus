@@ -348,9 +348,11 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
   useEffect(() => {
     if (!socket || !currentRoom || isOwner || !isConnected) return;
-    if (currentState?.type !== 'screen' || currentState.status !== 'sharing') return;
-
-    socket.emit('screen:viewer-ready');
+    if (currentState?.type !== 'screen' || currentState.status !== 'sharing') return;  
+  
+    if ('io' in socket) {  
+      socket.emit('screen:viewer-ready');  
+    }
   }, [currentRoom, currentState, isConnected, isOwner, socket]);
 
   return {
