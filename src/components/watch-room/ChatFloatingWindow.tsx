@@ -44,12 +44,14 @@ export default function ChatFloatingWindow() {
         const data = await response.json();
         console.log('[ChatFloatingWindow] Server config:', data);
 
-        if (data.enabled && data.serverType) {
-          setServerType(data.serverType);
-          console.log('[ChatFloatingWindow] Server type:', data.serverType);
+        // 修改：正确访问 WatchRoom 配置
+        const watchRoomConfig = data.WatchRoom || data;
+        if (watchRoomConfig.enabled && watchRoomConfig.serverType) {
+          setServerType(watchRoomConfig.serverType);
+          console.log('[ChatFloatingWindow] Server type:', watchRoomConfig.serverType);
 
           // 如果是 synctv 模式，获取 synctv 配置
-          if (data.serverType === 'synctv') {
+          if (watchRoomConfig.serverType === 'synctv') {
             const roomId = watchRoom?.currentRoom?.id;
             console.log('[ChatFloatingWindow] Current room ID:', roomId);
 
