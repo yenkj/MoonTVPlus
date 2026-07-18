@@ -162,6 +162,10 @@ class WatchRoomSocketManager {
       throw new Error('synctv URL not configured');
     }
 
+    if (!config.roomId) {
+      throw new Error('roomId is required for synctv connection');
+    }
+
     // 创建 synctv WebSocket 客户端
     const synctvClient = new SynctvWebSocketClient();
 
