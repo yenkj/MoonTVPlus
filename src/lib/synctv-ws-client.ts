@@ -59,6 +59,9 @@ export class SynctvWebSocketClient {
       config = this.config;
     }
 
+    // 此时 config 一定不是 undefined
+    const finalConfig = config;
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -67,15 +70,15 @@ export class SynctvWebSocketClient {
       return this.connectionPromise;
     }
 
-    this.config = config;
+    this.config = finalConfig;
 
     this.connectionPromise = new Promise((resolve, reject) => {
       try {
-        const wsUrl = this.buildWebSocketUrl(config);
+        const wsUrl = this.buildWebSocketUrl(finalConfig);
         console.log('[synctv-ws] Connecting to:', wsUrl);
 
         // 创建 WebSocket 连接，使用 token 作为 subprotocol
-        this.ws = new WebSocket(wsUrl, [config.token]);
+        this.ws = new WebSocket(wsUrl, [finalConfig.token]);
 
         // 重要：设置 binaryType 为 arraybuffer
         this.ws.binaryType = 'arraybuffer';
