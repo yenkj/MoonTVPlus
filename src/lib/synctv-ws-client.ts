@@ -1,52 +1,53 @@
 /**
  * synctv WebSocket 客户端
- * 用于连接 synctv 服务器，提供稳定的实时通信
+ * 用于连接 synctv 服务器，通过 WebRTC 进行语音通信
  */
 
-import { adaptEventFromSynctv, adaptEventToSynctv, parseSynctvMessage } from './synctv-adapter';
+import {
+  MessageType,
+  Message,
+  WebRTCData,
+  encodeMessage,
+  decodeMessage,
+} from './synctv-proto';
 
 export interface SynctvWSConfig {
   url: string;
   token: string;
-  roomId?: string;
+  roomId: string; // synctv 需要 roomId
 }
 
-// 使用与 Socket.IO 兼容的事件处理器签名
-export type SynctvEventHandler = (data: any) => void;
+// WebRTC 事件处理器
+export type WebRTCEventHandler = (data: WebRTCData, sender?: { userId: string; username: string }) => void;
 
 export class SynctvWebSocketClient {
   private ws: WebSocket | null = null;
   private config: SynctvWSConfig | null = null;
-  private eventHandlers: Map<string, Set<SynctvEventHandler>> = new Map();
   private connectionPromise: Promise<void> | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectDelay = 2000;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
   private isConnected = false;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+
+  // WebRTC 事件处理器
+  private webrtcHandlers: Map<MessageType, Set<WebRTCEventHandler>> = new Map();
+
+  // 用户信息（从 synctv 获取）
+  private userId: string = '';
+  private username: string = '';
+  private connId: string = '';
 
   // Socket ID（兼容 Socket.IO 的 id 属性）
   readonly id: string;
 
   constructor() {
-    // 生成类似 Socket.IO 的 ID 格式（例如：TzgZ5-h8h8h8h8）
+    // 生成临时 ID
     this.id = Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15);
+    this.connId = this.id;
   }
 
-  // 重载签名：无参数版本（用于重新连接）
-  connect(): Promise<void>;
-  // 重载签名：带配置参数版本（首次连接）
-  connect(config: SynctvWSConfig): Promise<void>;
-  // 实际实现
-  async connect(config?: SynctvWSConfig): Promise<void> {
-    // 如果没有提供 config，使用之前保存的配置（重新连接）
-    if (!config) {
-      if (this.config) {
-        return this.connect(this.config);
-      }
-      throw new Error('No previous config available for reconnection');
-    }
-
+  async connect(config: SynctvWSConfig): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -59,11 +60,14 @@ export class SynctvWebSocketClient {
 
     this.connectionPromise = new Promise((resolve, reject) => {
       try {
-        // 构建 WebSocket URL
         const wsUrl = this.buildWebSocketUrl(config);
+        console.log('[synctv-ws] Connecting to:', wsUrl);
 
-        // 创建 WebSocket 连接
+        // 创建 WebSocket 连接，使用 token 作为 subprotocol
         this.ws = new WebSocket(wsUrl, [config.token]);
+
+        // 重要：设置 binaryType 为 arraybuffer
+        this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
           console.log('[synctv-ws] Connected to synctv server');
@@ -108,46 +112,69 @@ export class SynctvWebSocketClient {
     } else if (url.protocol === 'https:') {
       url.protocol = 'wss:';
     }
-    // synctv WebSocket 路径
-    url.pathname = '/api/room/ws';
+    // synctv WebSocket 路径需要包含 roomId
+    url.pathname = `/api/room/${config.roomId}/ws`;
     return url.toString();
   }
 
-  private handleMessage(message: string) {
+  private handleMessage(data: ArrayBuffer | string) {
     try {
-      const parsed = parseSynctvMessage(message);
-      if (!parsed) {
-        console.warn('[synctv-ws] Failed to parse message:', message);
-        return;
+      // synctv 发送的是二进制 protobuf 消息
+      let uint8Array: Uint8Array;
+      if (typeof data === 'string') {
+        // 如果是字符串（不应该发生，但做保护）
+        console.warn('[synctv-ws] Received string message, expected binary');
+        uint8Array = new TextEncoder().encode(data);
+      } else {
+        uint8Array = new Uint8Array(data);
       }
 
-      // 将 synctv 事件转换为 MoonTVPlus 事件
-      const adapted = adaptEventFromSynctv(parsed.event, parsed.data);
-      
-      // 如果返回 null，表示该事件被忽略
-      if (!adapted) {
-        return;
-      }
+      // 解码 protobuf 消息
+      const msg: Message = decodeMessage(uint8Array);
 
-      const { event, data } = adapted;
-
-      // 触发事件处理器
-      this.triggerHandlers(event, data);
+      // 处理不同类型的消息
+      this.handleMessageType(msg);
     } catch (error) {
       console.error('[synctv-ws] Error handling message:', error);
     }
   }
 
-  // 触发内部事件处理器（私有方法）
-  private triggerHandlers(event: string, data: any) {
-    const handlers = this.eventHandlers.get(event);
+  private handleMessageType(msg: Message) {
+    switch (msg.type) {
+      case MessageType.ERROR:
+        console.error('[synctv-ws] Server error:', msg.errorMessage);
+        break;
+
+      case MessageType.VIEWER_COUNT:
+        // 观看人数更新
+        console.log('[synctv-ws] Viewer count:', msg.viewerCount);
+        break;
+
+      case MessageType.WEBRTC_OFFER:
+      case MessageType.WEBRTC_ANSWER:
+      case MessageType.WEBRTC_ICE_CANDIDATE:
+      case MessageType.WEBRTC_JOIN:
+      case MessageType.WEBRTC_LEAVE:
+        // WebRTC 相关事件
+        if (msg.webrtcData) {
+          this.triggerWebRTCHandlers(msg.type, msg.webrtcData, msg.sender);
+        }
+        break;
+
+      default:
+        // 忽略其他消息类型（播放同步等由 MoonTVPlus 自己处理）
+        break;
+    }
+  }
+
+  private triggerWebRTCHandlers(type: MessageType, data: WebRTCData, sender?: { userId: string; username: string }) {
+    const handlers = this.webrtcHandlers.get(type);
     if (handlers) {
       handlers.forEach(handler => {
         try {
-          // 只传递 data，与 Socket.IO 的签名一致
-          handler(data);
+          handler(data, sender);
         } catch (error) {
-          console.error(`[synctv-ws] Error in event handler for ${event}:`, error);
+          console.error(`[synctv-ws] Error in WebRTC handler for type ${type}:`, error);
         }
       });
     }
@@ -178,11 +205,12 @@ export class SynctvWebSocketClient {
   private startHeartbeat() {
     this.stopHeartbeat();
 
+    // synctv 不需要显式的心跳，但我们可以定期检查连接状态
     this.heartbeatInterval = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.send('heartbeat', {});
+      if (this.ws?.readyState !== WebSocket.OPEN) {
+        console.warn('[synctv-ws] Connection lost');
       }
-    }, 10000); // 每10秒发送心跳
+    }, 30000);
   }
 
   private stopHeartbeat() {
@@ -192,77 +220,191 @@ export class SynctvWebSocketClient {
     }
   }
 
-  // 发送事件（send 方法）
-  send(event: string, data?: any) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[synctv-ws] WebSocket is not connected');
-      return;
-    }
+  // ==================== WebRTC 方法 ====================
 
-    // 将 MoonTVPlus 事件转换为 synctv 事件
-    const adapted = adaptEventToSynctv(event, data);
-
-    // 如果返回 null，表示该事件不应转发到 synctv
-    if (!adapted) {
-      return;
-    }
-
-    const { event: synctvEvent, data: synctvData } = adapted;
-
-    const message = JSON.stringify({
-      type: synctvEvent,
-      payload: synctvData,
+  /**
+   * 加入 WebRTC 会话
+   */
+  joinWebRTC() {
+    this.sendWebRTCMessage(MessageType.WEBRTC_JOIN, {
+      data: '',
+      to: '',
+      from: `${this.userId}:${this.connId}`,
     });
-
-    this.ws.send(message);
   }
 
-  // emit 方法（与 send 方法相同，用于兼容 Socket.IO 接口）
-  emit(event: string, data?: any, callback?: (response: any) => void) {
-    this.send(event, data);
+  /**
+   * 离开 WebRTC 会话
+   */
+  leaveWebRTC() {
+    this.sendWebRTCMessage(MessageType.WEBRTC_LEAVE, {
+      data: '',
+      to: '',
+      from: `${this.userId}:${this.connId}`,
+    });
+  }
 
-    // 如果有回调，模拟 Socket.IO 的回调行为
-    // 注意：synctv 是异步的，回调可能不会被调用
-    if (callback) {
-      console.warn('[synctv-ws] Callback parameter in emit() is not supported in synctv mode');
+  /**
+   * 发送 WebRTC Offer
+   */
+  sendOffer(targetUserId: string, targetConnId: string, offer: RTCSessionDescriptionInit) {
+    this.sendWebRTCMessage(MessageType.WEBRTC_OFFER, {
+      data: JSON.stringify(offer),
+      to: `${targetUserId}:${targetConnId}`,
+      from: `${this.userId}:${this.connId}`,
+    });
+  }
+
+  /**
+   * 发送 WebRTC Answer
+   */
+  sendAnswer(targetUserId: string, targetConnId: string, answer: RTCSessionDescriptionInit) {
+    this.sendWebRTCMessage(MessageType.WEBRTC_ANSWER, {
+      data: JSON.stringify(answer),
+      to: `${targetUserId}:${targetConnId}`,
+      from: `${this.userId}:${this.connId}`,
+    });
+  }
+
+  /**
+   * 发送 ICE Candidate
+   */
+  sendIceCandidate(targetUserId: string, targetConnId: string, candidate: RTCIceCandidateInit) {
+    this.sendWebRTCMessage(MessageType.WEBRTC_ICE_CANDIDATE, {
+      data: JSON.stringify(candidate),
+      to: `${targetUserId}:${targetConnId}`,
+      from: `${this.userId}:${this.connId}`,
+    });
+  }
+
+  /**
+   * 监听 WebRTC 事件
+   */
+  onWebRTC(type: MessageType, handler: WebRTCEventHandler) {
+    if (!this.webrtcHandlers.has(type)) {
+      this.webrtcHandlers.set(type, new Set());
     }
+    this.webrtcHandlers.get(type)!.add(handler);
   }
 
-  // 监听事件
-  on(event: string, handler: SynctvEventHandler) {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, new Set());
-    }
-    this.eventHandlers.get(event)!.add(handler);
-  }
-
-  // 只监听一次事件（触发后自动移除）
-  once(event: string, handler: SynctvEventHandler) {
-    const wrappedHandler: SynctvEventHandler = (data) => {
-      // 先移除监听器
-      this.off(event, wrappedHandler);
-      // 再调用原始处理器
-      handler(data);
-    };
-    this.on(event, wrappedHandler);
-  }
-
-  // 移除事件监听（handler 可选，如果不提供则移除该事件的所有监听器）
-  off(event: string, handler?: SynctvEventHandler) {
-    const handlers = this.eventHandlers.get(event);
+  /**
+   * 移除 WebRTC 事件监听
+   */
+  offWebRTC(type: MessageType, handler?: WebRTCEventHandler) {
+    const handlers = this.webrtcHandlers.get(type);
     if (handlers) {
       if (handler) {
         handlers.delete(handler);
       } else {
-        // 如果没有提供 handler，清除该事件的所有监听器
         handlers.clear();
       }
     }
   }
 
-  // 断开连接
+  /**
+   * 发送 WebRTC 消息（内部方法）
+   */
+  private sendWebRTCMessage(type: MessageType, webrtcData: WebRTCData) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[synctv-ws] WebSocket is not connected');
+      return;
+    }
+
+    const msg: Message = {
+      type,
+      timestamp: Date.now(),
+      webrtcData,
+    };
+
+    const encoded = encodeMessage(msg);
+    this.ws.send(encoded);
+  }
+
+  // ==================== Socket.IO 兼容接口 ====================
+
+  /**
+   * 发送事件（兼容 Socket.IO，但 synctv 主要用于 WebRTC）
+   */
+  emit(event: string, data?: any, callback?: (response: any) => void) {
+    // 对于 WebRTC 事件，使用专用方法
+    if (event === 'voice:webrtc:join') {
+      this.joinWebRTC();
+      return;
+    }
+    if (event === 'voice:webrtc:leave') {
+      this.leaveWebRTC();
+      return;
+    }
+
+    // 其他事件暂不处理
+    console.warn('[synctv-ws] emit() for non-WebRTC events is not supported:', event);
+  }
+
+  /**
+   * 监听事件（兼容 Socket.IO）
+   */
+  on(event: string, handler: (data: any) => void) {
+    // 将 Socket.IO 事件名转换为 synctv 的 WebRTC 类型
+    const typeMap: Record<string, MessageType> = {
+      'voice:webrtc:offer': MessageType.WEBRTC_OFFER,
+      'voice:webrtc:answer': MessageType.WEBRTC_ANSWER,
+      'voice:webrtc:ice': MessageType.WEBRTC_ICE_CANDIDATE,
+      'voice:webrtc:join': MessageType.WEBRTC_JOIN,
+      'voice:webrtc:leave': MessageType.WEBRTC_LEAVE,
+    };
+
+    const msgType = typeMap[event];
+    if (msgType !== undefined) {
+      this.onWebRTC(msgType, (data, sender) => {
+        handler({ data, sender });
+      });
+    } else {
+      console.warn('[synctv-ws] on() for non-WebRTC events is not supported:', event);
+    }
+  }
+
+  /**
+   * 移除事件监听（兼容 Socket.IO）
+   */
+  off(event: string, handler?: (data: any) => void) {
+    const typeMap: Record<string, MessageType> = {
+      'voice:webrtc:offer': MessageType.WEBRTC_OFFER,
+      'voice:webrtc:answer': MessageType.WEBRTC_ANSWER,
+      'voice:webrtc:ice': MessageType.WEBRTC_ICE_CANDIDATE,
+      'voice:webrtc:join': MessageType.WEBRTC_JOIN,
+      'voice:webrtc:leave': MessageType.WEBRTC_LEAVE,
+    };
+
+    const msgType = typeMap[event];
+    if (msgType !== undefined) {
+      this.offWebRTC(msgType);
+    }
+  }
+
+  /**
+   * 只监听一次事件（兼容 Socket.IO）
+   */
+  once(event: string, handler: (data: any) => void) {
+    const wrappedHandler = (data: any) => {
+      this.off(event, wrappedHandler);
+      handler(data);
+    };
+    this.on(event, wrappedHandler);
+  }
+
+  // ==================== 连接管理 ====================
+
+  /**
+   * 断开连接
+   */
   disconnect() {
     this.stopHeartbeat();
+
+    // 离开 WebRTC
+    if (this.isConnected) {
+      this.leaveWebRTC();
+    }
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -271,13 +413,25 @@ export class SynctvWebSocketClient {
     this.connectionPromise = null;
   }
 
-  // 获取连接状态
-  getConnected(): boolean {
+  /**
+   * 获取连接状态
+   */
+  get connected(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
   }
 
-  // connected 属性（用于兼容 Socket.IO 接口）
-  get connected(): boolean {
-    return this.getConnected();
+  /**
+   * 获取用户 ID
+   */
+  getUserId(): string {
+    return this.userId;
+  }
+
+  /**
+   * 设置用户信息
+   */
+  setUserInfo(userId: string, username: string) {
+    this.userId = userId;
+    this.username = username;
   }
 }
