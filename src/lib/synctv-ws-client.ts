@@ -47,7 +47,18 @@ export class SynctvWebSocketClient {
     this.connId = this.id;
   }
 
-  async connect(config: SynctvWSConfig): Promise<void> {
+  // 函数重载：支持带参数和不带参数两种调用方式
+  connect(): Promise<void>;
+  connect(config: SynctvWSConfig): Promise<void>;
+  async connect(config?: SynctvWSConfig): Promise<void> {
+    // 如果没有传入 config，使用之前保存的 config
+    if (!config) {
+      if (!this.config) {
+        throw new Error('No config available for reconnection');
+      }
+      config = this.config;
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
