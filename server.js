@@ -84,11 +84,14 @@ async function getSynctvToken() {
 
     const data = await response.json();
 
-    if (data.code !== 200 || !data.data?.token) {
-      throw new Error('Invalid login response');
+    // synctv 登录响应可能是：
+    // {data: {token: "..."}, time: ...} 或 {code: 200, data: {token: "..."}}
+    const token = data.data?.token;
+    if (!token) {
+      throw new Error('Invalid login response: no token found');
     }
 
-    cachedSynctvToken = data.data.token;
+    cachedSynctvToken = token;
 
     // JWT token 通常有效期为 24 小时，设置过期时间
     synctvTokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
