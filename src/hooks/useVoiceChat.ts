@@ -427,7 +427,7 @@ export function useVoiceChat({
           }
         } else {
           // SynctvWebSocketClient
-          if (!socket.getConnected()) {
+          if (!socket.connected) {
             return;
           }
         }
