@@ -42,28 +42,47 @@ export default function ChatFloatingWindow() {
       try {
         const response = await fetch('/api/server-config');
         const data = await response.json();
+        console.log('[ChatFloatingWindow] Server config:', data);
+
         if (data.enabled && data.serverType) {
           setServerType(data.serverType);
+          console.log('[ChatFloatingWindow] Server type:', data.serverType);
 
           // 如果是 synctv 模式，获取 synctv 配置
           if (data.serverType === 'synctv') {
+            const roomId = watchRoom?.currentRoom?.id;
+            console.log('[ChatFloatingWindow] Current room ID:', roomId);
+
+            if (!roomId) {
+              console.log('[ChatFloatingWindow] No room ID yet, skipping synctv config');
+              return;
+            }
+
             const tokenResponse = await fetch('/api/synctv/token');
             const tokenData = await tokenResponse.json();
+            console.log('[ChatFloatingWindow] Token data:', tokenData);
 
             const configResponse = await fetch('/api/synctv/config');
             const configData = await configResponse.json();
+            console.log('[ChatFloatingWindow] Config data:', configData);
 
-            if (tokenData.data?.token && configData.data?.url && watchRoom?.currentRoom?.id) {
+            if (tokenData.data?.token && configData.data?.url) {
+              console.log('[ChatFloatingWindow] Setting synctv config');
               setSynctvConfig({
                 url: configData.data.url,
                 token: tokenData.data.token,
-                roomId: watchRoom.currentRoom.id,
+                roomId: roomId,
+              });
+            } else {
+              console.error('[ChatFloatingWindow] Missing token or URL:', {
+                hasToken: !!tokenData.data?.token,
+                hasUrl: !!configData.data?.url
               });
             }
           }
         }
       } catch (error) {
-        console.error('Failed to fetch server config:', error);
+        console.error('[ChatFloatingWindow] Failed to fetch server config:', error);
       }
     };
 
