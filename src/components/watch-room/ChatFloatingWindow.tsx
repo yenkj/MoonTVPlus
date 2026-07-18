@@ -5,8 +5,11 @@ import { AlertCircle,Info, LogOut, Maximize2, MessageCircle, Mic, MicOff, Minimi
 import { useEffect, useRef,useState } from 'react';
 
 import { useVoiceChat } from '@/hooks/useVoiceChat';
+import { useSynctvVoiceChat } from '@/hooks/useSynctvVoiceChat';
 
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
+
+import type { SynctvWSConfig } from '@/lib/synctv-ws-client';
 
 const EMOJI_LIST = ['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👏', '🎉', '❤️', '🔥', '⭐'];
 
@@ -29,7 +32,45 @@ export default function ChatFloatingWindow() {
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
-  // 使用语音聊天hook
+  // synctv 配置状态
+  const [serverType, setServerType] = useState<'internal' | 'external' | 'synctv'>('internal');
+  const [synctvConfig, setSynctvConfig] = useState<SynctvWSConfig | null>(null);
+
+  // 获取服务器配置
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/server-config');
+        const data = await response.json();
+        if (data.enabled && data.serverType) {
+          setServerType(data.serverType);
+
+          // 如果是 synctv 模式，获取 synctv 配置
+          if (data.serverType === 'synctv') {
+            const tokenResponse = await fetch('/api/synctv/token');
+            const tokenData = await tokenResponse.json();
+
+            const configResponse = await fetch('/api/synctv/config');
+            const configData = await configResponse.json();
+
+            if (tokenData.data?.token && configData.data?.url && watchRoom?.currentRoom?.id) {
+              setSynctvConfig({
+                url: configData.data.url,
+                token: tokenData.data.token,
+                roomId: watchRoom.currentRoom.id,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch server config:', error);
+      }
+    };
+
+    fetchConfig();
+  }, [watchRoom?.currentRoom?.id]);
+
+  // 使用语音聊天hook（根据 serverType 选择）
   const voiceChat = useVoiceChat({
     socket: watchRoom?.socket || null,
     roomId: watchRoom?.currentRoom?.id || null,
@@ -37,6 +78,18 @@ export default function ChatFloatingWindow() {
     isSpeakerEnabled,
     members: watchRoom?.members || [],
   });
+
+  // synctv 语音聊天（仅在 synctv 模式下使用）
+  const synctvVoiceChat = useSynctvVoiceChat({
+    synctvConfig: serverType === 'synctv' ? synctvConfig : null,
+    roomId: watchRoom?.currentRoom?.id || null,
+    isMicEnabled,
+    isSpeakerEnabled,
+    members: watchRoom?.members || [],
+  });
+
+  // 根据配置选择使用哪个语音聊天
+  const activeVoiceChat = serverType === 'synctv' ? synctvVoiceChat : voiceChat;
 
   // 当房间变化时重置状态
   useEffect(() => {
@@ -473,7 +526,7 @@ export default function ChatFloatingWindow() {
             {/* 麦克风按钮 */}
             <button
               onClick={() => setIsMicEnabled(!isMicEnabled)}
-              disabled={voiceChat.isConnecting}
+              disabled={activeVoiceChat.isConnecting}
               className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                 isMicEnabled
                   ? 'bg-white text-green-600 hover:bg-white/90'
@@ -510,13 +563,13 @@ export default function ChatFloatingWindow() {
 
           {/* 状态指示 */}
           <div className="text-center text-xs text-white/60">
-            {voiceChat.isConnecting && '正在连接...'}
-            {voiceChat.error && (
-              <span className="text-red-300">{voiceChat.error}</span>
+            {activeVoiceChat.isConnecting && '正在连接...'}
+            {activeVoiceChat.error && (
+              <span className="text-red-300">{activeVoiceChat.error}</span>
             )}
-            {!voiceChat.isConnecting && !voiceChat.error && isMicEnabled && (
+            {!activeVoiceChat.isConnecting && !activeVoiceChat.error && isMicEnabled && (
               <span>
-                {voiceChat.strategy === 'webrtc-fallback' ? 'WebRTC模式' : '服务器中转模式'}
+                {serverType === 'synctv' ? 'Synctv WebRTC模式' : (voiceChat.strategy === 'webrtc-fallback' ? 'WebRTC模式' : '服务器中转模式')}
               </span>
             )}
           </div>
