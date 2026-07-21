@@ -71,28 +71,39 @@ export function useSynctvVoiceChat({
 
   // 播放远程音频流
   const playRemoteStream = useCallback((peerId: string, stream: MediaStream) => {
+    // 使用完整的 peerId (userId:connId) 作为 key，与 synctv 原生实现一致
     let audio = remoteAudioElementsRef.current.get(peerId);
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
       remoteAudioElementsRef.current.set(peerId, audio);
+      console.log('[SynctvVoice] Created audio element for peer', peerId);
     }
+
     audio.srcObject = stream;
+    console.log('[SynctvVoice] Set stream for peer', peerId);
   }, []);
 
   // 创建 WebRTC 连接
   const createPeerConnection = useCallback((peerId: string, client: SynctvWebSocketClient) => {
+    // 如果连接已存在，直接返回
+    const existingPc = peerConnectionsRef.current.get(peerId);
+    if (existingPc) {
+      console.log('[SynctvVoice] Reusing existing connection for', peerId);
+      return existingPc;
+    }
+
     const pc = new RTCPeerConnection({ iceServers });
 
     // ICE 候选收集
     pc.onicecandidate = (event) => {
-      if (event.candidate && client.connected) {
+      if (event.candidate) {
         const [userId, connId] = peerId.split(':');
         client.sendIceCandidate(userId, connId, event.candidate.toJSON());
       }
     };
 
-    // 接收远程音频流
+    // 接收远程音频流（确保只处理一次）
     pc.ontrack = (event) => {
       console.log('[SynctvVoice] Received remote track from', peerId);
       const remoteStream = event.streams[0];
@@ -221,7 +232,7 @@ export function useSynctvVoiceChat({
         peerConnectionsRef.current.delete(peerId);
       }
 
-      // 停止播放音频
+      // 停止播放音频（使用完整的 peerId）
       const audio = remoteAudioElementsRef.current.get(peerId);
       if (audio) {
         audio.pause();
