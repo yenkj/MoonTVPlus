@@ -13,7 +13,7 @@ import {
 
 export interface SynctvWSConfig {
   url: string;
-  token: string;
+  token: string; // 如果为空，使用 guest 身份
   roomId: string; // synctv 需要 roomId
 }
 
@@ -77,8 +77,15 @@ export class SynctvWebSocketClient {
         const wsUrl = this.buildWebSocketUrl(finalConfig);
         console.log('[synctv-ws] Connecting to:', wsUrl);
 
-        // 创建 WebSocket 连接，使用 token 作为 subprotocol
-        this.ws = new WebSocket(wsUrl, [finalConfig.token]);
+        // 创建 WebSocket 连接
+        // 如果有 token，使用 token 作为 subprotocol；否则作为 guest 连接
+        if (finalConfig.token && finalConfig.token !== 'guest') {
+          console.log('[synctv-ws] Connecting with token (authenticated user)');
+          this.ws = new WebSocket(wsUrl, [finalConfig.token]);
+        } else {
+          console.log('[synctv-ws] Connecting as guest');
+          this.ws = new WebSocket(wsUrl);
+        }
 
         // 重要：设置 binaryType 为 arraybuffer
         this.ws.binaryType = 'arraybuffer';
@@ -126,8 +133,9 @@ export class SynctvWebSocketClient {
     } else if (url.protocol === 'https:') {
       url.protocol = 'wss:';
     }
-    // synctv WebSocket 路径需要包含 roomId
-    url.pathname = `/api/room/${config.roomId}/ws`;
+    // synctv WebSocket 路径是 /api/room/ws，roomId 通过 query 参数传递
+    url.pathname = '/api/room/ws';
+    url.searchParams.set('roomId', config.roomId);
     return url.toString();
   }
 
