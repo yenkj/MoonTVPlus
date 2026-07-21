@@ -71,9 +71,12 @@ export function useSynctvVoiceChat({
 
   // 播放远程音频流（完全按照 synctv 原生实现）
   const playRemoteStream = useCallback((peerId: string, stream: MediaStream) => {
+    console.log('[SynctvVoice] playRemoteStream called for peer:', peerId, 'streamId:', stream.id);
+
     // 停止旧的 audio 元素（如果存在）
     const oldAudio = remoteAudioElementsRef.current.get(peerId);
     if (oldAudio) {
+      console.log('[SynctvVoice] Stopping old audio element for peer:', peerId);
       oldAudio.pause();
       oldAudio.srcObject = null;
     }
@@ -85,7 +88,7 @@ export function useSynctvVoiceChat({
 
     // 存储 audio 元素（直接覆盖旧的）
     remoteAudioElementsRef.current.set(peerId, remoteAudio);
-    console.log('[SynctvVoice] Created/updated audio element for peer', peerId);
+    console.log('[SynctvVoice] Created new audio element for peer:', peerId, 'total audio elements:', remoteAudioElementsRef.current.size);
   }, []);
 
   // 创建 WebRTC 连接（完全按照 synctv 原生实现）
