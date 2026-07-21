@@ -124,12 +124,10 @@ export function useVoiceChat({
     // ICE候选收集
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
-        if ('io' in socket) {
-          socket.emit('voice:ice', {
-            targetUserId: peerId,
-            candidate: event.candidate.toJSON(),
-          });
-        }
+        socket.emit('voice:ice', {
+          targetUserId: peerId,
+          candidate: event.candidate.toJSON(),
+        });
       }
     };
 
@@ -313,12 +311,10 @@ export function useVoiceChat({
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      if ('io' in socket) {
-        socket.emit('voice:offer', {
-          targetUserId: peerId,
-          offer: offer,
-        });
-      }
+      socket.emit('voice:offer', {
+        targetUserId: peerId,
+        offer: offer,
+      });
       console.log('[VoiceChat] Sent offer to', peerId);
     } catch (err) {
       console.error('[VoiceChat] Failed to create offer:', err);
@@ -348,13 +344,11 @@ export function useVoiceChat({
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-  
-      if ('io' in socket) {
-        socket.emit('voice:answer', {
-          targetUserId: data.userId,
-          answer: answer,
-        });
-      }
+
+      socket.emit('voice:answer', {
+        targetUserId: data.userId,
+        answer: answer,
+      });
       console.log('[VoiceChat] Sent answer to', data.userId);
     } catch (err) {
       console.error('[VoiceChat] Failed to handle offer:', err);
@@ -413,23 +407,10 @@ export function useVoiceChat({
 
       // 保存roomId的引用，避免闭包问题
       const currentRoomId = roomId;
-        
+
       processor.onaudioprocess = (e) => {
-        if (!socket) {
+        if (!socket || !socket.connected) {
           return;
-        }
-    
-        // 检查连接状态
-        if ('io' in socket) {
-          // Socket.IO 客户端
-          if (!socket.connected) {
-            return;
-          }
-        } else {
-          // SynctvWebSocketClient
-          if (!socket.connected) {
-            return;
-          }
         }
 
         const inputData = e.inputBuffer.getChannelData(0);
@@ -469,16 +450,14 @@ export function useVoiceChat({
         }
 
         // 发送PCM数据到服务器
-        if ('io' in socket) {
-          socket.emit('voice:audio-chunk', {
-            roomId: currentRoomId,
-            audioData: Array.from(new Uint8Array(pcmData.buffer)),
-            sampleRate: 16000,
-          });
-        }
-        };
+        socket.emit('voice:audio-chunk', {
+          roomId: currentRoomId,
+          audioData: Array.from(new Uint8Array(pcmData.buffer)),
+          sampleRate: 16000,
+        });
+      };
 
-        source.connect(processor);
+      source.connect(processor);
 
       // ScriptProcessorNode需要连接到某个节点才能触发onaudioprocess
       // 但连接到destination会产生本地回声，所以创建一个静音的GainNode
@@ -665,10 +644,7 @@ export function useVoiceChat({
             console.log('[VoiceChat] WebRTC mode - initiating peer connections');
 
             // 向房间内的其他成员发起连接
-            let otherMembers = members;
-            if ('io' in socket) {
-              otherMembers = members.filter(m => m.id !== socket.id);
-            }
+            const otherMembers = members.filter(m => m.id !== socket.id);
             console.log('[VoiceChat] Found', otherMembers.length, 'other members, initiating connections');
 
             if (otherMembers.length > 0) {
@@ -723,12 +699,6 @@ export function useVoiceChat({
     };
   }, [isSpeakerEnabled, playRemoteStream]);
 
-  // 处理其他用户开启麦克风的通知
-  const handleMicEnabled = useCallback((data: { userId: string }) => {
-    console.log('[VoiceChat] User', data.userId, 'enabled microphone');
-    // 其他用户开启了麦克风，我们不需要做任何事，等待接收他们的offer即可
-  }, []);
-
   // 监听Socket.IO事件
   useEffect(() => {
     if (!socket) return;
@@ -739,12 +709,15 @@ export function useVoiceChat({
     socket.on('voice:ice', handleIceCandidate);
 
     // 监听其他用户开启麦克风的通知
-    socket.on('voice:mic-enabled', handleMicEnabled);
+    socket.on('voice:mic-enabled', (data: { userId: string }) => {
+      console.log('[VoiceChat] User', data.userId, 'enabled microphone');
+      // 其他用户开启了麦克风，我们不需要做任何事，等待接收他们的offer即可
+    });
 
     // 服务器中转事件
     const handleAudioChunk = (data: { userId: string; audioData: number[]; sampleRate?: number }) => {
       // 过滤掉自己发送的音频，避免回声
-      if ('io' in socket && data.userId === socket.id) {
+      if (data.userId === socket.id) {
         return;
       }
 
@@ -760,10 +733,10 @@ export function useVoiceChat({
       socket.off('voice:offer', handleOffer);
       socket.off('voice:answer', handleAnswer);
       socket.off('voice:ice', handleIceCandidate);
-      socket.off('voice:mic-enabled', handleMicEnabled);
+      socket.off('voice:mic-enabled');
       socket.off('voice:audio-chunk', handleAudioChunk);
     };
-  }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, handleMicEnabled, playServerRelayAudio]);
+  }, [socket, strategy, handleOffer, handleAnswer, handleIceCandidate, playServerRelayAudio]);
 
   // 监听房间成员变化 - 处理新成员加入的情况
   useEffect(() => {
@@ -774,10 +747,7 @@ export function useVoiceChat({
 
     // 检查是否有新成员加入
     const currentPeerIds = Array.from(peerConnectionsRef.current.keys());
-    let memberIds = members.map(m => m.id);
-    if ('io' in socket) {
-      memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);
-    }
+    const memberIds = members.filter(m => m.id !== socket.id).map(m => m.id);
 
     // 找出新加入的成员（在memberIds中但不在currentPeerIds中）
     const newMemberIds = memberIds.filter(id => !currentPeerIds.includes(id));
