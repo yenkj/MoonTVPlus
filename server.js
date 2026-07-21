@@ -104,6 +104,59 @@ async function getSynctvToken() {
   }
 }
 
+// 为 MoonTVPlus 用户创建临时 synctv 账号
+async function createSynctvUser(username, password) {
+  const token = await getSynctvToken();
+  if (!token) {
+    throw new Error('Failed to get synctv token');
+  }
+
+  try {
+    console.log('[synctv] Creating user:', username);
+    const response = await fetch(`${SYNCTV_URL}/api/admin/user/add`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        username: username,
+        password: password,
+        role: 'user' // 普通用户角色
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      // 如果用户已存在，忽略错误（可能是之前创建的）
+      if (response.status === 400 && errorText.includes('already exists')) {
+        console.log('[synctv] User already exists:', username);
+      } else {
+        throw new Error(`Failed to create user: ${response.status} ${errorText}`);
+      }
+    } else {
+      console.log('[synctv] User created:', username);
+    }
+
+    // 登录该用户获取 token
+    const loginResponse = await fetch(`${SYNCTV_URL}/api/user/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!loginResponse.ok) {
+      throw new Error('Failed to login new user');
+    }
+
+    const data = await loginResponse.json();
+    return data.data.token;
+  } catch (error) {
+    console.error('[synctv] Error creating user:', error.message);
+    throw error;
+  }
+}
+
 // 创建 synctv 房间
 async function createSynctvRoom(roomData) {
   const token = await getSynctvToken();
@@ -112,6 +165,13 @@ async function createSynctvRoom(roomData) {
   }
 
   try {
+    console.log('[synctv] Creating room with data:', JSON.stringify({
+      roomName: roomData.roomName || roomData.name,
+      password: roomData.password ? '(set)' : '(empty)',
+      settings: roomData.settings
+    }));
+    console.log('[synctv] API URL:', `${SYNCTV_URL}/api/room/create`);
+
     const response = await fetch(`${SYNCTV_URL}/api/room/create`, {
       method: 'POST',
       headers: {
@@ -119,27 +179,74 @@ async function createSynctvRoom(roomData) {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        name: roomData.name,
+        roomName: roomData.roomName || roomData.name, // 使用 roomName，兼容 name
         password: roomData.password || '',
         settings: {
-          canSee: roomData.isPublic !== false,
-          approval: false,
-          chat: true,
+          hidden: roomData.settings?.hidden || false
         }
       })
     });
 
-    const data = await response.json();
+    console.log('[synctv] Response status:', response.status, response.statusText);
 
-    if (data.code !== 200) {
-      throw new Error(data.message || 'Failed to create room');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[synctv] API error response:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
-    console.log(`[synctv] Room created: ${data.data.id}`);
-    return data.data;
+    const data = await response.json();
+    console.log('[synctv] API response:', JSON.stringify(data));
+
+    // synctv 返回 HTTP 201，但 JSON 中可能没有 code 字段
+    if (response.status !== 201 && response.status !== 200) {
+      throw new Error(data.message || `Unexpected HTTP status: ${response.status}`);
+    }
+
+    const roomId = data.data?.roomId || data.data?.id;
+    if (!roomId) {
+      throw new Error('No roomId in response: ' + JSON.stringify(data));
+    }
+
+    console.log(`[synctv] Room created: ${roomId}`);
+    return { id: roomId };
   } catch (error) {
     console.error('[synctv] Failed to create room:', error.message);
+    console.error('[synctv] Error stack:', error.stack);
     throw error;
+  }
+}
+
+// 删除 synctv 房间
+async function deleteSynctvRoom(roomId) {
+  const token = await getSynctvToken();
+  if (!token) {
+    console.error('[synctv] Cannot delete room: no token');
+    return false;
+  }
+
+  try {
+    console.log('[synctv] Deleting room:', roomId);
+    const response = await fetch(`${SYNCTV_URL}/api/admin/room/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: roomId })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[synctv] Failed to delete room:', response.status, errorText);
+      return false;
+    }
+
+    console.log('[synctv] Room deleted successfully:', roomId);
+    return true;
+  } catch (error) {
+    console.error('[synctv] Error deleting room:', error.message);
+    return false;
   }
 }
 
@@ -161,8 +268,9 @@ async function getWatchRoomConfig() {
 
 // 观影室服务器类
 class WatchRoomServer {
-  constructor(io) {
+  constructor(io, config = {}) {
     this.io = io;
+    this.config = config; // 保存配置
     this.rooms = new Map();
     this.members = new Map();
     this.socketToRoom = new Map();
@@ -179,7 +287,7 @@ class WatchRoomServer {
       console.log(`[WatchRoom] Client connected: ${socket.id}`);
 
       // 创建房间
-      socket.on('room:create', (data, callback) => {
+      socket.on('room:create', async (data, callback) => {
         try {
           const roomId = this.generateRoomId();
           const userId = socket.id;
@@ -200,6 +308,24 @@ class WatchRoomServer {
             createdAt: Date.now(),
             lastOwnerHeartbeat: Date.now(),
           };
+
+          // 如果配置为 synctv 模式，创建 synctv 房间
+          console.log('[WatchRoom] Checking serverType:', this.config.serverType);
+          if (this.config.serverType === 'synctv') {
+            console.log('[WatchRoom] Creating synctv room...');
+            try {
+              const synctvRoom = await createSynctvRoom({
+                roomName: data.name,
+                password: data.password,
+                settings: { hidden: false }
+              });
+              room.synctvRoomId = synctvRoom.id;
+              console.log(`[synctv] Room created in synctv: ${synctvRoom.id}`);
+            } catch (error) {
+              console.error('[synctv] Failed to create room in synctv:', error);
+              // synctv 创建失败不影响 MoonTVPlus 房间创建
+            }
+          }
 
           const member = {
             id: userId,
@@ -690,7 +816,7 @@ class WatchRoomServer {
     });
   }
 
-  handleLeaveRoom(socket) {
+  async handleLeaveRoom(socket) {
     const roomInfo = this.socketToRoom.get(socket.id);
     if (!roomInfo) return;
 
@@ -722,7 +848,7 @@ class WatchRoomServer {
         });
 
         // 立即删除房间（跳过通知，因为上面已经发送了）
-        this.deleteRoom(roomId, true);
+        await this.deleteRoom(roomId, true);
 
         // 清除可能存在的删除定时器
         if (this.roomDeletionTimers.has(roomId)) {
@@ -734,12 +860,12 @@ class WatchRoomServer {
         if (roomMembers.size === 0) {
           console.log(`[WatchRoom] Room ${roomId} is now empty, will delete in 30 seconds if no one rejoins`);
 
-          const deletionTimer = setTimeout(() => {
+          const deletionTimer = setTimeout(async () => {
             // 再次检查房间是否仍然为空
             const currentRoomMembers = this.members.get(roomId);
             if (currentRoomMembers && currentRoomMembers.size === 0) {
               console.log(`[WatchRoom] Room ${roomId} deletion timer expired, deleting room`);
-              this.deleteRoom(roomId);
+              await this.deleteRoom(roomId);
               this.roomDeletionTimers.delete(roomId);
             }
           }, 30000); // 30秒后删除
@@ -753,8 +879,16 @@ class WatchRoomServer {
     this.socketToRoom.delete(socket.id);
   }
 
-  deleteRoom(roomId, skipNotify = false) {
+  async deleteRoom(roomId, skipNotify = false) {
     console.log(`[WatchRoom] Deleting room ${roomId}`);
+
+    const room = this.rooms.get(roomId);
+
+    // 如果有 synctv 房间，同步删除
+    if (room && room.synctvRoomId) {
+      console.log(`[WatchRoom] Deleting synctv room: ${room.synctvRoomId}`);
+      await deleteSynctvRoom(room.synctvRoomId);
+    }
 
     // 如果不跳过通知，则发送 room:deleted 事件
     if (!skipNotify) {
@@ -913,18 +1047,31 @@ app.prepare().then(async () => {
       const parsedUrl = parse(req.url, true);
 
       // ==================== synctv API 路由 ====================
-      // 获取 synctv token
-      if (parsedUrl.pathname === '/api/synctv/token' && req.method === 'GET') {
+      // 获取 synctv token（为用户创建临时账号）
+      if (parsedUrl.pathname === '/api/synctv/token' && req.method === 'POST') {
         res.setHeader('Content-Type', 'application/json');
         try {
-          const token = await getSynctvToken();
-          if (token) {
-            res.end(JSON.stringify({ code: 200, data: { token } }));
-          } else {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ code: 500, error: 'Failed to get synctv token' }));
+          let body = '';
+          for await (const chunk of req) {
+            body += chunk;
           }
+          const { username } = JSON.parse(body);
+
+          if (!username) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ code: 400, error: 'Username is required' }));
+            return;
+          }
+
+          // 为用户创建/获取 synctv 账号并返回 token
+          // 用户名使用 moontv_ 前缀避免冲突
+          const synctvUsername = `moontv_${username}`;
+          const password = `moontv_${username}_${Date.now()}`; // 简单密码
+
+          const token = await createSynctvUser(synctvUsername, password);
+          res.end(JSON.stringify({ code: 200, data: { token } }));
         } catch (error) {
+          console.error('[synctv] Failed to create user token:', error);
           res.statusCode = 500;
           res.end(JSON.stringify({ code: 500, error: error.message }));
         }
@@ -1004,9 +1151,9 @@ app.prepare().then(async () => {
 
   if (shouldStartInternalWatchRoom && io) {
     // 初始化观影室服务器
-    watchRoomServer = new WatchRoomServer(io);
+    watchRoomServer = new WatchRoomServer(io, watchRoomConfig);
     console.log('[WatchRoom] Socket.IO server initialized');
-    
+
     if (watchRoomConfig.serverType === 'synctv') {
       console.log('[WatchRoom] Voice chat will use synctv server for better stability');
     }
