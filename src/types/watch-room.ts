@@ -14,6 +14,7 @@ export interface Room {
   currentState: PlayState | LiveState | ScreenState | MusicSyncState | null;
   createdAt: number;
   lastOwnerHeartbeat: number;
+  synctvRoomId?: string; // synctv 房间 ID（仅当 serverType=synctv 时存在）
 }
 
 export type RoomType = 'sync' | 'screen' | 'music';
