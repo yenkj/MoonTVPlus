@@ -24,7 +24,12 @@ class WatchRoomSocketManager {
   private reconnectSuccessCallback: (() => void) | null = null;
 
   async connect(config: WatchRoomConfig): Promise<WatchRoomSocket> {
-    if (this.socket?.connected) {
+    // synctv 模式下，仍然连接 MoonTVPlus 内置服务器
+    // 语音聊天会使用独立的 synctv 连接（在 useVoiceChat 中处理）
+    // 不再使用 connectToSynctv
+
+    // 使用原有的 Socket.IO 连接逻辑
+    if (this.socket && 'connected' in this.socket && this.socket.connected) {
       return this.socket;
     }
 
@@ -39,20 +44,24 @@ class WatchRoomSocketManager {
           reject(new Error('Socket connection timeout'));
         }, 10000);
 
-        this.socket!.once('connect', () => {
-          clearTimeout(timeout);
-          this.connectionPromise = null;
-          resolve(this.socket!);
-        });
+        if ('once' in this.socket!) {
+          this.socket!.once('connect', () => {
+            clearTimeout(timeout);
+            this.connectionPromise = null;
+            resolve(this.socket!);
+          });
 
-        this.socket!.once('connect_error', (error) => {
-          clearTimeout(timeout);
-          this.connectionPromise = null;
-          reject(error);
-        });
+          this.socket!.once('connect_error', (error: Error) => {
+            clearTimeout(timeout);
+            this.connectionPromise = null;
+            reject(error);
+          });
 
-        if (!this.socket!.connected) {
-          this.socket!.connect();
+          if ('connected' in this.socket! && !this.socket!.connected) {
+            if ('connect' in this.socket!) {
+              this.socket!.connect();
+            }
+          }
         }
       });
 
@@ -69,7 +78,8 @@ class WatchRoomSocketManager {
       reconnectionAttempts: 5,
     };
 
-    if (config.serverType === 'internal') {
+    // synctv 模式也使用内置服务器（只有语音用 synctv）
+    if (config.serverType === 'internal' || config.serverType === 'synctv') {
       // 内部服务器 - 连接到同一个域名的Socket.IO服务器
       this.socket = io({
         ...socketOptions,
@@ -134,6 +144,52 @@ class WatchRoomSocketManager {
     return this.connectionPromise;
   }
 
+  // 连接到 synctv 服务器
+  private async connectToSynctv(config: WatchRoomConfig): Promise<WatchRoomSocket> {
+    // 获取 synctv token
+    const tokenResponse = await fetch('/api/synctv/token');
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.data?.token) {
+      throw new Error('Failed to get synctv token');
+    }
+
+    // 获取 synctv 配置
+    const configResponse = await fetch('/api/synctv/config');
+    const synctvConfig = await configResponse.json();
+
+    if (!synctvConfig.data?.url) {
+      throw new Error('synctv URL not configured');
+    }
+
+    if (!config.roomId) {
+      throw new Error('roomId is required for synctv connection');
+    }
+
+    // 创建 synctv WebSocket 客户端
+    const synctvClient = new SynctvWebSocketClient();
+
+    await synctvClient.connect({
+      url: synctvConfig.data.url,
+      token: tokenData.data.token,
+      roomId: config.roomId,
+    });
+
+    this.socket = synctvClient as any;
+    this.config = config;
+
+    // 设置事件监听器（适配器会自动转换事件）
+    this.setupSynctvEventListeners(synctvClient);
+
+    return synctvClient as any;
+  }
+
+  // 设置 synctv 事件监听器
+  private setupSynctvEventListeners(client: SynctvWebSocketClient) {
+    // synctv 客户端会自动通过适配器转换事件，这里不需要额外处理
+    // 事件会直接触发，由 WatchRoomProvider 处理
+  }
+
   disconnect() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -154,9 +210,13 @@ class WatchRoomSocketManager {
       this.socket.off('disconnect');
       this.socket.off('error');
       this.socket.off('heartbeat:pong');
-      this.socket.io.off('reconnect_attempt');
-      this.socket.io.off('reconnect');
-      this.socket.io.off('reconnect_failed');
+
+      // 只在 Socket.IO 时移除 Manager 级别的事件监听器
+      if ('io' in this.socket) {
+        this.socket.io.off('reconnect_attempt');
+        this.socket.io.off('reconnect');
+        this.socket.io.off('reconnect_failed');
+      }
 
       this.socket.disconnect();
       this.socket = null;
@@ -183,12 +243,12 @@ class WatchRoomSocketManager {
       this.lastHeartbeatResponse = Date.now();
     });
 
-    this.socket.on('disconnect', (reason) => {
+    this.socket.on('disconnect', (reason: string) => {
       // eslint-disable-next-line no-console
       console.log('[WatchRoom] Socket disconnected:', reason);
     });
 
-    this.socket.on('error', (error) => {
+    this.socket.on('error', (error: any) => {
       // eslint-disable-next-line no-console
       console.error('[WatchRoom] Socket error:', error);
     });
@@ -198,27 +258,30 @@ class WatchRoomSocketManager {
       this.lastHeartbeatResponse = Date.now();
     });
 
-    // 监听重连尝试
-    this.socket.io.on('reconnect_attempt', (attemptNumber) => {
-      // eslint-disable-next-line no-console
-      console.log('[WatchRoom] Reconnect attempt:', attemptNumber);
-    });
+    // 只在 Socket.IO 时监听 Manager 级别的重连事件
+    if ('io' in this.socket) {
+      // 监听重连尝试
+      this.socket.io.on('reconnect_attempt', (attemptNumber: number) => {
+        // eslint-disable-next-line no-console
+        console.log('[WatchRoom] Reconnect attempt:', attemptNumber);
+      });
 
-    // 监听重连成功
-    this.socket.io.on('reconnect', (attemptNumber) => {
-      // eslint-disable-next-line no-console
-      console.log('[WatchRoom] Reconnected after', attemptNumber, 'attempts');
-      // 重置心跳响应时间
-      this.lastHeartbeatResponse = Date.now();
-      this.reconnectSuccessCallback?.();
-    });
+      // 监听重连成功
+      this.socket.io.on('reconnect', (attemptNumber: number) => {
+        // eslint-disable-next-line no-console
+        console.log('[WatchRoom] Reconnected after', attemptNumber, 'attempts');
+        // 重置心跳响应时间
+        this.lastHeartbeatResponse = Date.now();
+        this.reconnectSuccessCallback?.();
+      });
 
-    // 监听重连失败
-    this.socket.io.on('reconnect_failed', () => {
-      // eslint-disable-next-line no-console
-      console.error('[WatchRoom] Reconnect failed after all attempts');
-      this.reconnectFailedCallback?.();
-    });
+      // 监听重连失败
+      this.socket.io.on('reconnect_failed', () => {
+        // eslint-disable-next-line no-console
+        console.error('[WatchRoom] Reconnect failed after all attempts');
+        this.reconnectFailedCallback?.();
+      });
+    }
   }
 
   private startHeartbeat() {
