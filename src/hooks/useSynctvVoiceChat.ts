@@ -69,30 +69,34 @@ export function useSynctvVoiceChat({
     }
   }, []);
 
-  // 播放远程音频流
+  // 播放远程音频流（完全按照 synctv 原生实现）
   const playRemoteStream = useCallback((peerId: string, stream: MediaStream) => {
-    // 使用完整的 peerId (userId:connId) 作为 key，与 synctv 原生实现一致
-    let audio = remoteAudioElementsRef.current.get(peerId);
-    if (!audio) {
-      audio = new Audio();
-      audio.autoplay = true;
-      remoteAudioElementsRef.current.set(peerId, audio);
-      console.log('[SynctvVoice] Created audio element for peer', peerId);
+    // 停止旧的 audio 元素（如果存在）
+    const oldAudio = remoteAudioElementsRef.current.get(peerId);
+    if (oldAudio) {
+      oldAudio.pause();
+      oldAudio.srcObject = null;
     }
 
-    audio.srcObject = stream;
-    console.log('[SynctvVoice] Set stream for peer', peerId);
+    // 创建新的 audio 元素（与 synctv 原生一致）
+    const remoteAudio = new Audio();
+    remoteAudio.srcObject = stream;
+    remoteAudio.autoplay = true;
+
+    // 存储 audio 元素（直接覆盖旧的）
+    remoteAudioElementsRef.current.set(peerId, remoteAudio);
+    console.log('[SynctvVoice] Created/updated audio element for peer', peerId);
   }, []);
 
-  // 创建 WebRTC 连接
+  // 创建 WebRTC 连接（完全按照 synctv 原生实现）
   const createPeerConnection = useCallback((peerId: string, client: SynctvWebSocketClient) => {
-    // 如果连接已存在，直接返回
-    const existingPc = peerConnectionsRef.current.get(peerId);
-    if (existingPc) {
-      console.log('[SynctvVoice] Reusing existing connection for', peerId);
-      return existingPc;
+    // 停止旧的连接（如果存在）
+    const oldPc = peerConnectionsRef.current.get(peerId);
+    if (oldPc) {
+      oldPc.close();
     }
 
+    // 总是创建新的 PeerConnection（与 synctv 原生一致）
     const pc = new RTCPeerConnection({ iceServers });
 
     // ICE 候选收集
@@ -103,7 +107,7 @@ export function useSynctvVoiceChat({
       }
     };
 
-    // 接收远程音频流（确保只处理一次）
+    // 接收远程音频流
     pc.ontrack = (event) => {
       console.log('[SynctvVoice] Received remote track from', peerId);
       const remoteStream = event.streams[0];
@@ -112,6 +116,16 @@ export function useSynctvVoiceChat({
       }
     };
 
+    // 添加本地流
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        if (localStreamRef.current) {
+          pc.addTrack(track, localStreamRef.current);
+        }
+      });
+    }
+
+    // 存储连接（直接覆盖旧的）
     peerConnectionsRef.current.set(peerId, pc);
     return pc;
   }, [isSpeakerEnabled, playRemoteStream]);
@@ -121,13 +135,6 @@ export function useSynctvVoiceChat({
     if (!localStreamRef.current) return;
 
     const pc = createPeerConnection(peerId, client);
-
-    // 添加本地流
-    localStreamRef.current.getTracks().forEach(track => {
-      if (localStreamRef.current) {
-        pc.addTrack(track, localStreamRef.current);
-      }
-    });
 
     try {
       const offer = await pc.createOffer();
