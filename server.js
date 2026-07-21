@@ -1057,6 +1057,8 @@ app.prepare().then(async () => {
           }
           const { username } = JSON.parse(body);
 
+          console.log('[synctv] Token request for username:', username);
+
           if (!username) {
             res.statusCode = 400;
             res.end(JSON.stringify({ code: 400, error: 'Username is required' }));
@@ -1068,10 +1070,26 @@ app.prepare().then(async () => {
           const synctvUsername = `moontv_${username}`;
           const password = `moontv_${username}_${Date.now()}`; // 简单密码
 
+          console.log('[synctv] Creating synctv user:', synctvUsername);
           const token = await createSynctvUser(synctvUsername, password);
+          console.log('[synctv] Successfully got token for user:', synctvUsername);
           res.end(JSON.stringify({ code: 200, data: { token } }));
         } catch (error) {
-          console.error('[synctv] Failed to create user token:', error);
+          console.error('[synctv] Failed to create user token:', error.message);
+          console.error('[synctv] Error stack:', error.stack);
+
+          // 如果创建用户失败，尝试使用管理员 token
+          try {
+            console.log('[synctv] Fallback to admin token');
+            const adminToken = await getSynctvToken();
+            if (adminToken) {
+              res.end(JSON.stringify({ code: 200, data: { token: adminToken } }));
+              return;
+            }
+          } catch (fallbackError) {
+            console.error('[synctv] Fallback also failed:', fallbackError.message);
+          }
+
           res.statusCode = 500;
           res.end(JSON.stringify({ code: 500, error: error.message }));
         }
