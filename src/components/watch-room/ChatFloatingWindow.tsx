@@ -52,15 +52,23 @@ export default function ChatFloatingWindow() {
 
           // 如果是 synctv 模式，获取 synctv 配置
           if (watchRoomConfig.serverType === 'synctv') {
-            const roomId = watchRoom?.currentRoom?.id;
-            console.log('[ChatFloatingWindow] Current room ID:', roomId);
+            // 使用 synctvRoomId（如果存在），否则使用 MoonTVPlus roomId
+            const synctvRoomId = watchRoom?.currentRoom?.synctvRoomId;
+            const roomId = synctvRoomId || watchRoom?.currentRoom?.id;
+            console.log('[ChatFloatingWindow] Current room ID:', roomId, 'synctvRoomId:', synctvRoomId);
 
             if (!roomId) {
               console.log('[ChatFloatingWindow] No room ID yet, skipping synctv config');
               return;
             }
 
-            const tokenResponse = await fetch('/api/synctv/token');
+            const tokenResponse = await fetch('/api/synctv/token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+              })
+            });
             const tokenData = await tokenResponse.json();
             console.log('[ChatFloatingWindow] Token data:', tokenData);
 
@@ -69,7 +77,7 @@ export default function ChatFloatingWindow() {
             console.log('[ChatFloatingWindow] Config data:', configData);
 
             if (tokenData.data?.token && configData.data?.url) {
-              console.log('[ChatFloatingWindow] Setting synctv config');
+              console.log('[ChatFloatingWindow] Setting synctv config with roomId:', roomId);
               setSynctvConfig({
                 url: configData.data.url,
                 token: tokenData.data.token,
@@ -89,7 +97,7 @@ export default function ChatFloatingWindow() {
     };
 
     fetchConfig();
-  }, [watchRoom?.currentRoom?.id]);
+  }, [watchRoom?.currentRoom?.id, watchRoom?.currentRoom?.synctvRoomId]);
 
   // 使用语音聊天hook（根据 serverType 选择）
   const voiceChat = useVoiceChat({
