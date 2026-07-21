@@ -134,12 +134,10 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
-        if ('io' in socket) {
-          socket.emit('screen:ice', {
-            targetUserId: userId,
-            candidate: event.candidate.toJSON(),
-          });
-        }
+        socket.emit('screen:ice', {
+          targetUserId: userId,
+          candidate: event.candidate.toJSON(),
+        });
       }
     };
 
@@ -168,12 +166,10 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
       const pc = createPeerConnection(memberId, true);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      if ('io' in socket) {
-        socket.emit('screen:offer', {
-          targetUserId: memberId,
-          offer,
-        });
-      }
+      socket.emit('screen:offer', {
+        targetUserId: memberId,
+        offer,
+      });
     } catch (err) {
       console.error('[ScreenShare] Failed to send offer:', err);
       setError('无法建立屏幕共享连接');
@@ -247,12 +243,10 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        if ('io' in socket) {
-          socket.emit('screen:answer', {
-            targetUserId: data.userId,
-            answer,
-          });
-        }
+        socket.emit('screen:answer', {
+          targetUserId: data.userId,
+          answer,
+        });
       } catch (err) {
         console.error('[ScreenShare] Failed to handle offer:', err);
         setError('接收共享画面失败');
@@ -350,9 +344,7 @@ export function useScreenShare(qualityPreset: ScreenShareQualityPreset = 'smooth
     if (!socket || !currentRoom || isOwner || !isConnected) return;
     if (currentState?.type !== 'screen' || currentState.status !== 'sharing') return;
 
-    if ('io' in socket) {
-      socket.emit('screen:viewer-ready');
-    }
+    socket.emit('screen:viewer-ready');
   }, [currentRoom, currentState, isConnected, isOwner, socket]);
 
   return {
