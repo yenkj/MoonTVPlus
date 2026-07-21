@@ -175,13 +175,6 @@ export function useSynctvVoiceChat({
 
       const pc = createPeerConnection(peerId, client);
 
-      // 添加本地流
-      localStreamRef.current.getTracks().forEach(track => {
-        if (localStreamRef.current) {
-          pc.addTrack(track, localStreamRef.current);
-        }
-      });
-
       try {
         await pc.setRemoteDescription(JSON.parse(data.data));
         const answer = await pc.createAnswer();
