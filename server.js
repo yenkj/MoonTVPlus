@@ -122,7 +122,7 @@ async function createSynctvUser(username, password) {
       body: JSON.stringify({
         username: username,
         password: password,
-        role: 'user' // 普通用户角色
+        role: 3 // RoleUser = 3（普通用户角色）
       })
     });
 
