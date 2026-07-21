@@ -1066,9 +1066,22 @@ app.prepare().then(async () => {
           }
 
           // 为用户创建/获取 synctv 账号并返回 token
-          // 用户名使用 moontv_ 前缀避免冲突
-          const synctvUsername = `moontv_${username}`;
-          const password = `moontv_${username}_${Date.now()}`; // 简单密码
+          // 使用 MoonTVPlus 用户名，添加唯一标识避免冲突
+          // synctv 限制：用户名最大32字符，只允许字母、数字、汉字
+          let synctvUsername;
+          if (username.length <= 20) {
+            // 用户名较短，添加 moontv_ 前缀和短时间戳
+            const shortTimestamp = Date.now().toString().slice(-6); // 取后6位
+            synctvUsername = `moontv_${username}_${shortTimestamp}`; // 最多 7 + 20 + 1 + 6 = 34 字符，需要调整
+            if (synctvUsername.length > 32) {
+              synctvUsername = synctvUsername.substring(0, 32);
+            }
+          } else {
+            // 用户名较长，截断并添加短时间戳
+            const shortTimestamp = Date.now().toString().slice(-6);
+            synctvUsername = `${username.substring(0, 25)}_${shortTimestamp}`; // 25 + 1 + 6 = 32
+          }
+          const password = `pwd_${Date.now()}`; // 简单密码
 
           console.log('[synctv] Creating synctv user:', synctvUsername);
           const token = await createSynctvUser(synctvUsername, password);
