@@ -300,6 +300,16 @@ export class SynctvWebSocketClient {
   }
 
   /**
+   * 发送 WebRTC Join（加入 WebRTC）
+   */
+  sendJoin() {
+    console.log('[synctv-ws] Sending WEBRTC_JOIN message');
+    this.sendWebRTCMessage(MessageType.WEBRTC_JOIN, {
+      from: `${this.userId}:${this.connId}`,
+    });
+  }
+
+  /**
    * 监听 WebRTC 事件
    */
   onWebRTC(type: MessageType, handler: WebRTCEventHandler) {
