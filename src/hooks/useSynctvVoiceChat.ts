@@ -273,6 +273,9 @@ export function useSynctvVoiceChat({
       // 设置 WebRTC 事件处理
       setupWebRTCEventHandlers(client);
 
+      // 发送 WebRTC Join 消息，告诉服务器我要加入 WebRTC
+      client.sendJoin();
+
       setIsConnected(true);
       console.log('[SynctvVoice] Connected to synctv');
     } catch (err) {
