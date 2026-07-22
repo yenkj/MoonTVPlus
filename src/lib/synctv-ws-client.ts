@@ -305,6 +305,8 @@ export class SynctvWebSocketClient {
   sendJoin() {
     console.log('[synctv-ws] Sending WEBRTC_JOIN message');
     this.sendWebRTCMessage(MessageType.WEBRTC_JOIN, {
+      data: '',
+      to: '',
       from: `${this.userId}:${this.connId}`,
     });
   }
