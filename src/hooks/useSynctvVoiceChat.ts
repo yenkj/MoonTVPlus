@@ -10,7 +10,7 @@ import type { Member } from '@/types/watch-room';
 
 interface UseSynctvVoiceChatOptions {
   synctvConfig: SynctvWSConfig | null;
-  roomId: string | null;
+  // roomId 从 synctvConfig.roomId 获取，不再需要单独传递
   isMicEnabled: boolean;
   isSpeakerEnabled: boolean;
   members: Member[];
@@ -18,7 +18,6 @@ interface UseSynctvVoiceChatOptions {
 
 export function useSynctvVoiceChat({
   synctvConfig,
-  roomId,
   isMicEnabled,
   isSpeakerEnabled,
   members,
@@ -247,7 +246,7 @@ export function useSynctvVoiceChat({
 
   // 连接到 synctv
   const connect = useCallback(async () => {
-    if (!synctvConfig || !roomId) {
+    if (!synctvConfig || !synctvConfig.roomId) {
       console.error('[SynctvVoice] Missing config or roomId');
       return;
     }
@@ -256,27 +255,23 @@ export function useSynctvVoiceChat({
     setError(null);
 
     try {
-      // 获取麦克风流
+      console.log('[SynctvVoice] Connecting...');
+
+      // 获取本地音频流
       await getLocalStream();
 
-      // 创建 synctv 客户端
+      // 创建 synctv WebSocket 客户端
       const client = new SynctvWebSocketClient();
       synctvClientRef.current = client;
 
-      // 连接到 synctv
-      await client.connect({
-        ...synctvConfig,
-        roomId,
-      });
+      // 连接到 synctv（synctvConfig 已经包含 roomId）
+      await client.connect(synctvConfig);
 
       // 设置用户信息
       client.setUserInfo(client.id, 'user');
 
-      // 设置 WebRTC 事件处理器
+      // 设置 WebRTC 事件处理
       setupWebRTCEventHandlers(client);
-
-      // 加入 WebRTC
-      client.joinWebRTC();
 
       setIsConnected(true);
       console.log('[SynctvVoice] Connected to synctv');
@@ -286,7 +281,7 @@ export function useSynctvVoiceChat({
     } finally {
       setIsConnecting(false);
     }
-  }, [synctvConfig, roomId, getLocalStream, setupWebRTCEventHandlers]);
+  }, [synctvConfig, getLocalStream, setupWebRTCEventHandlers]);
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -315,7 +310,7 @@ export function useSynctvVoiceChat({
 
   // 自动连接/断开
   useEffect(() => {
-    if (isMicEnabled && synctvConfig && roomId) {
+    if (isMicEnabled && synctvConfig && synctvConfig.roomId) {
       connect();
     } else if (!isMicEnabled) {
       disconnect();
@@ -324,7 +319,7 @@ export function useSynctvVoiceChat({
     return () => {
       disconnect();
     };
-  }, [isMicEnabled, synctvConfig, roomId, connect, disconnect]);
+  }, [isMicEnabled, synctvConfig, connect, disconnect]);
 
   // 静音/取消静音
   useEffect(() => {
