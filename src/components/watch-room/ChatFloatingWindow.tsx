@@ -62,11 +62,27 @@ export default function ChatFloatingWindow() {
               return;
             }
 
+            // 使用 MoonTVPlus 用户名，而不是随机 ID
+            // 从 localStorage 读取当前用户的用户名，如果没有则使用房间名作为基础
+            const storedRoomInfo = localStorage.getItem('watch_room_info');
+            let currentUserName = 'guest';
+
+            if (storedRoomInfo) {
+              try {
+                const info = JSON.parse(storedRoomInfo);
+                currentUserName = info.userName || 'guest';
+              } catch (e) {
+                console.error('[ChatFloatingWindow] Failed to parse storedRoomInfo:', e);
+              }
+            }
+
+            console.log('[ChatFloatingWindow] Using username for synctv:', currentUserName);
+
             const tokenResponse = await fetch('/api/synctv/token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                username: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                username: currentUserName
               })
             });
             const tokenData = await tokenResponse.json();
@@ -111,7 +127,7 @@ export default function ChatFloatingWindow() {
   // synctv 语音聊天（仅在 synctv 模式下使用）
   const synctvVoiceChat = useSynctvVoiceChat({
     synctvConfig: serverType === 'synctv' ? synctvConfig : null,
-    roomId: watchRoom?.currentRoom?.id || null,
+    // roomId 从 synctvConfig.roomId 获取，不再需要传递
     isMicEnabled,
     isSpeakerEnabled,
     members: watchRoom?.members || [],
