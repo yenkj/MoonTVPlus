@@ -165,8 +165,12 @@ async function createSynctvRoom(roomData) {
   }
 
   try {
+    // 添加随机后缀避免房间名冲突
+    const roomNameWithSuffix = `${roomData.roomName || roomData.name}_${Date.now().toString().slice(-6)}`;
+
     console.log('[synctv] Creating room with data:', JSON.stringify({
-      roomName: roomData.roomName || roomData.name,
+      roomName: roomNameWithSuffix,
+      originalName: roomData.roomName || roomData.name,
       password: roomData.password ? '(set)' : '(empty)',
       settings: roomData.settings
     }));
@@ -179,7 +183,7 @@ async function createSynctvRoom(roomData) {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        roomName: roomData.roomName || roomData.name, // 使用 roomName，兼容 name
+        roomName: roomNameWithSuffix, // 使用带后缀的房间名
         password: roomData.password || '',
         settings: {
           hidden: roomData.settings?.hidden || false
