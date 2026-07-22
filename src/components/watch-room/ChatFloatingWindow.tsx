@@ -115,12 +115,12 @@ export default function ChatFloatingWindow() {
     fetchConfig();
   }, [watchRoom?.currentRoom?.id, watchRoom?.currentRoom?.synctvRoomId]);
 
-  // 使用语音聊天hook（根据 serverType 选择）
+  // 使用语音聊天hook（仅在 internal 模式下使用）
   const voiceChat = useVoiceChat({
-    socket: watchRoom?.socket || null,
+    socket: serverType === 'internal' ? (watchRoom?.socket || null) : null,  // synctv 模式下不使用
     roomId: watchRoom?.currentRoom?.id || null,
-    isMicEnabled,
-    isSpeakerEnabled,
+    isMicEnabled: serverType === 'internal' ? isMicEnabled : false,  // synctv 模式下禁用
+    isSpeakerEnabled: serverType === 'internal' ? isSpeakerEnabled : false,  // synctv 模式下禁用
     members: watchRoom?.members || [],
   });
 
