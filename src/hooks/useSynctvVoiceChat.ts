@@ -85,6 +85,11 @@ export function useSynctvVoiceChat({
     remoteAudio.srcObject = stream;
     remoteAudio.autoplay = true;
 
+    // 显式调用 play()（某些浏览器需要）
+    remoteAudio.play().catch(err => {
+      console.error('[SynctvVoice] Failed to play remote audio:', err);
+    });
+
     // 存储 audio 元素（直接覆盖旧的）
     remoteAudioElementsRef.current.set(peerId, remoteAudio);
     console.log('[SynctvVoice] Created new audio element for peer:', peerId, 'total audio elements:', remoteAudioElementsRef.current.size);
@@ -113,8 +118,14 @@ export function useSynctvVoiceChat({
     pc.ontrack = (event) => {
       console.log('[SynctvVoice] Received remote track from', peerId);
       const remoteStream = event.streams[0];
+      console.log('[SynctvVoice] Remote stream info:', {
+        streamId: remoteStream.id,
+        tracks: remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted }))
+      });
       if (isSpeakerEnabled) {
         playRemoteStream(peerId, remoteStream);
+      } else {
+        console.warn('[SynctvVoice] Speaker is disabled, not playing remote stream');
       }
     };
 
