@@ -53,15 +53,26 @@ export interface Message {
 }
 
 // 简化的 protobuf 编解码器
-// 变长整数编码
+// 变长整数编码（修复：正确处理零值）
 function encodeVarint(value: number): Uint8Array {
   const bytes: number[] = [];
   let v = value;
+
+  // 特殊处理：如果值为 0，返回 [0]
+  if (v === 0) {
+    return new Uint8Array([0]);
+  }
+
   while (v > 0x7f) {
     bytes.push((v & 0x7f) | 0x80);
     v >>>= 7;
   }
-  bytes.push(v);
+
+  // 添加最后一个字节（即使 v 为 0）
+  if (v > 0 || bytes.length === 0) {
+    bytes.push(v);
+  }
+
   return new Uint8Array(bytes);
 }
 
@@ -147,13 +158,16 @@ function decodeFixed64(reader: { pos: number; data: Uint8Array }): number {
   return Number(new DataView(bytes.buffer, bytes.byteOffset).getBigUint64(0, true));
 }
 
-// 编码消息
+// 编码消息（添加调试输出）
 export function encodeMessage(msg: Message): Uint8Array {
   const chunks: Uint8Array[] = [];
+
+  console.log('[synctv-proto] Encoding message:', msg);
 
   // type (field 1, wire type 0)
   if (msg.type !== 0) {
     const tag = (1 << 3) | 0; // field 1, wire type 0 (varint)
+    console.log('[synctv-proto] Encoding type:', { tag, wireType: 0, fieldValue: msg.type });
     chunks.push(encodeVarint(tag));
     chunks.push(encodeVarint(msg.type));
   }
@@ -161,6 +175,7 @@ export function encodeMessage(msg: Message): Uint8Array {
   // timestamp (field 2, wire type 5 - sfixed64)
   if (msg.timestamp !== 0) {
     const tag = (2 << 3) | 5;
+    console.log('[synctv-proto] Encoding timestamp:', { tag, wireType: 5, fieldValue: msg.timestamp });
     chunks.push(encodeVarint(tag));
     chunks.push(encodeSFixed64(msg.timestamp));
   }
@@ -228,6 +243,12 @@ export function encodeMessage(msg: Message): Uint8Array {
     result.set(chunk, offset);
     offset += chunk.length;
   }
+
+  // 输出完整的编码结果（十六进制）
+  const hexString = Array.from(result).map(b => b.toString(16).padStart(2, '0')).join(' ');
+  console.log('[synctv-proto] Encoded message hex:', hexString);
+  console.log('[synctv-proto] Encoded message length:', result.length);
+
   return result;
 }
 
