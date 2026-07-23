@@ -78,52 +78,15 @@ export function useSynctvVoiceChat({
       console.log('[SynctvVoice] Stopping old audio element for peer:', peerId);
       oldAudio.pause();
       oldAudio.srcObject = null;
-      // 从 DOM 中移除旧的音频元素
-      if (oldAudio.parentNode) {
-        oldAudio.parentNode.removeChild(oldAudio);
-      }
     }
 
     // 创建新的 audio 元素（与 synctv 原生一致）
     const remoteAudio = new Audio();
     remoteAudio.srcObject = stream;
     remoteAudio.autoplay = true;
-    remoteAudio.id = `audio-${peerId.replace(/:/g, '-')}`;
-
-    // 添加事件监听器来调试播放状态
-    remoteAudio.onloadedmetadata = () => {
-      console.log('[SynctvVoice] Audio metadata loaded for peer:', peerId);
-    };
-
-    remoteAudio.oncanplay = () => {
-      console.log('[SynctvVoice] Audio can play for peer:', peerId);
-    };
-
-    remoteAudio.onplay = () => {
-      console.log('[SynctvVoice] Audio started playing for peer:', peerId);
-    };
-
-    remoteAudio.onplaying = () => {
-      console.log('[SynctvVoice] Audio is playing for peer:', peerId);
-    };
-
-    remoteAudio.onerror = (e) => {
-      console.error('[SynctvVoice] Audio error for peer:', peerId, e);
-    };
-
-    remoteAudio.onpause = () => {
-      console.log('[SynctvVoice] Audio paused for peer:', peerId);
-    };
-
-    // 将音频元素添加到 DOM 中（某些浏览器需要）
-    remoteAudio.style.display = 'none';
-    document.body.appendChild(remoteAudio);
-    console.log('[SynctvVoice] Added audio element to DOM for peer:', peerId);
 
     // 显式调用 play()（某些浏览器需要）
-    remoteAudio.play().then(() => {
-      console.log('[SynctvVoice] play() promise resolved for peer:', peerId);
-    }).catch(err => {
+    remoteAudio.play().catch(err => {
       console.error('[SynctvVoice] Failed to play remote audio:', err);
     });
 
@@ -143,19 +106,6 @@ export function useSynctvVoiceChat({
     // 总是创建新的 PeerConnection（与 synctv 原生一致）
     const pc = new RTCPeerConnection({ iceServers });
 
-    // 监控连接状态
-    pc.onconnectionstatechange = () => {
-      console.log('[SynctvVoice] Connection state:', pc.connectionState, 'for peer:', peerId);
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log('[SynctvVoice] ICE connection state:', pc.iceConnectionState, 'for peer:', peerId);
-    };
-
-    pc.onicegatheringstatechange = () => {
-      console.log('[SynctvVoice] ICE gathering state:', pc.iceGatheringState, 'for peer:', peerId);
-    };
-
     // ICE 候选收集
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -168,23 +118,10 @@ export function useSynctvVoiceChat({
     pc.ontrack = (event) => {
       console.log('[SynctvVoice] Received remote track from', peerId);
       const remoteStream = event.streams[0];
-
-      // 详细输出音频轨道信息
-      const tracks = remoteStream.getTracks();
       console.log('[SynctvVoice] Remote stream info:', {
         streamId: remoteStream.id,
-        trackCount: tracks.length
+        tracks: remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted }))
       });
-      tracks.forEach((track, index) => {
-        console.log(`[SynctvVoice] Track ${index}:`, {
-          kind: track.kind,
-          enabled: track.enabled,
-          muted: track.muted,
-          readyState: track.readyState,
-          label: track.label
-        });
-      });
-
       if (isSpeakerEnabled) {
         playRemoteStream(peerId, remoteStream);
       } else {
