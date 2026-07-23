@@ -413,22 +413,20 @@ export default function WatchRoomScreenPage() {
 
             {isViewerFullscreen && isFullscreenChromeVisible && (
               <>
-                <div className='absolute left-4 top-4 flex items-center gap-2'>
-                  <button
-                    onClick={handleToggleRemotePlayback}
-                    className='inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition duration-200 hover:bg-black/75 hover:border-white/25'
-                    aria-label={isRemotePlaying ? '暂停播放' : '继续播放'}
-                    title={isRemotePlaying ? '暂停播放' : '继续播放'}
-                  >
-                    {isRemotePlaying ? <Pause className='h-5 w-5' /> : <Play className='h-5 w-5 ml-0.5' />}
-                  </button>
-                  <button
-                    onClick={closeViewerFullscreen}
-                    className='inline-flex items-center rounded-full border border-white/15 bg-black/55 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur transition duration-200 hover:bg-black/75 hover:border-white/25'
-                  >
-                    退出网页全屏
-                  </button>
-                </div>
+                <button
+                  onClick={closeViewerFullscreen}
+                  className='absolute left-4 top-4 inline-flex items-center rounded-full border border-white/15 bg-black/55 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur transition duration-200 hover:bg-black/75 hover:border-white/25'
+                >
+                  退出网页全屏
+                </button>
+                <button
+                  onClick={handleToggleRemotePlayback}
+                  className='absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur transition duration-200 hover:bg-black/75 hover:border-white/25'
+                  aria-label={isRemotePlaying ? '暂停播放' : '继续播放'}
+                  title={isRemotePlaying ? '暂停播放' : '继续播放'}
+                >
+                  {isRemotePlaying ? <Pause className='h-5 w-5' /> : <Play className='h-5 w-5 ml-0.5' />}
+                </button>
               </>
             )}
           </div>
