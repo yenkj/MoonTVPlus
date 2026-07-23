@@ -172,10 +172,11 @@ export function encodeMessage(msg: Message): Uint8Array {
     chunks.push(encodeVarint(msg.type));
   }
 
-  // timestamp (field 2, wire type 5 - sfixed64)
+  // timestamp (field 2, wire type 1 - fixed64)
+  // 注意：sfixed64 使用 wire type 1（64-bit），不是 wire type 5（32-bit）
   if (msg.timestamp !== 0) {
-    const tag = (2 << 3) | 5;
-    console.log('[synctv-proto] Encoding timestamp:', { tag, wireType: 5, fieldValue: msg.timestamp });
+    const tag = (2 << 3) | 1;  // field 2, wire type 1 (64-bit)
+    console.log('[synctv-proto] Encoding timestamp:', { tag, wireType: 1, fieldValue: msg.timestamp });
     chunks.push(encodeVarint(tag));
     chunks.push(encodeSFixed64(msg.timestamp));
   }
