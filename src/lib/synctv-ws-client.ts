@@ -11,6 +11,26 @@ import {
   decodeMessage,
 } from './synctv-proto';
 
+// 测试 protobuf 编码（用于调试）
+function testProtobufEncoding() {
+  const msg: Message = {
+    type: MessageType.WEBRTC_JOIN,
+    timestamp: Date.now(),
+  };
+  const encoded = encodeMessage(msg);
+  console.log('[synctv-ws] Test encoding:', {
+    type: msg.type,
+    timestamp: msg.timestamp,
+    encodedLength: encoded.length,
+    encodedHex: Array.from(encoded).map(b => b.toString(16).padStart(2, '0')).join(' ')
+  });
+}
+
+// 在浏览器中可以调用此函数测试
+if (typeof window !== 'undefined') {
+  (window as any).testProtobufEncoding = testProtobufEncoding;
+}
+
 export interface SynctvWSConfig {
   url: string;
   token: string; // 如果为空，使用 guest 身份
@@ -165,6 +185,8 @@ export class SynctvWebSocketClient {
     switch (msg.type) {
       case MessageType.ERROR:
         console.error('[synctv-ws] Server error:', msg.errorMessage);
+        // 触发错误事件（如果有监听器）
+        this.triggerWebRTCHandlers(msg.type, { data: msg.errorMessage || 'Unknown error', to: '', from: '' }, msg.sender);
         break;
 
       case MessageType.VIEWER_COUNT:
@@ -301,14 +323,26 @@ export class SynctvWebSocketClient {
 
   /**
    * 发送 WebRTC Join（加入 WebRTC）
+   * 注意：synctv 的 WEBRTC_JOIN 消息不包含 webrtcData，只发送 type
    */
   sendJoin() {
     console.log('[synctv-ws] Sending WEBRTC_JOIN message');
-    this.sendWebRTCMessage(MessageType.WEBRTC_JOIN, {
-      data: '',
-      to: '',
-      from: `${this.userId}:${this.connId}`,
-    });
+    console.log('[synctv-ws] User info:', { userId: this.userId, username: this.username, connId: this.connId });
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('[synctv-ws] WebSocket is not connected');
+      return;
+    }
+
+    // synctv 原生实现：WEBRTC_JOIN 只发送 type，不包含其他字段
+    const msg: Message = {
+      type: MessageType.WEBRTC_JOIN,
+      timestamp: Date.now(),
+    };
+
+    console.log('[synctv-ws] Message to send:', msg);
+    const encoded = encodeMessage(msg);
+    console.log('[synctv-ws] Encoded message length:', encoded.length);
+    this.ws.send(encoded);
   }
 
   /**
