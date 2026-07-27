@@ -144,9 +144,8 @@ export function useSynctvVoiceChat({
   }, [isSpeakerEnabled, playRemoteStream]);
 
   // 发起连接（创建 Offer）
+  // 即使没有本地流（麦克风关闭），也要发起连接以接收远程音频
   const initiateConnection = useCallback(async (peerId: string, client: SynctvWebSocketClient) => {
-    if (!localStreamRef.current) return;
-
     const pc = createPeerConnection(peerId, client);
 
     try {
@@ -155,7 +154,7 @@ export function useSynctvVoiceChat({
 
       const [userId, connId] = peerId.split(':');
       client.sendOffer(userId, connId, offer);
-      console.log('[SynctvVoice] Sent offer to', peerId);
+      console.log('[SynctvVoice] Sent offer to', peerId, localStreamRef.current ? 'with local stream' : 'without local stream (receive only)');
     } catch (err) {
       console.error('[SynctvVoice] Failed to create offer:', err);
     }
@@ -170,15 +169,13 @@ export function useSynctvVoiceChat({
       const peerId = `${sender.userId}:${data.from.split(':')[1]}`;
       console.log('[SynctvVoice] Peer joined:', peerId);
 
-      // 发起连接
-      if (localStreamRef.current) {
-        initiateConnection(peerId, client);
-      }
+      // 发起连接（即使没有本地流也要连接，以接收远程音频）
+      initiateConnection(peerId, client);
     });
 
     // 监听 Offer
     client.onWebRTC(MessageType.WEBRTC_OFFER, async (data, sender) => {
-      if (!sender || !localStreamRef.current) return;
+      if (!sender) return;
 
       const peerId = `${sender.userId}:${data.from.split(':')[1]}`;
       console.log('[SynctvVoice] Received offer from', peerId);
@@ -192,7 +189,7 @@ export function useSynctvVoiceChat({
 
         const [userId, connId] = peerId.split(':');
         client.sendAnswer(userId, connId, answer);
-        console.log('[SynctvVoice] Sent answer to', peerId);
+        console.log('[SynctvVoice] Sent answer to', peerId, localStreamRef.current ? 'with local stream' : 'without local stream (receive only)');
       } catch (err) {
         console.error('[SynctvVoice] Failed to handle offer:', err);
       }
@@ -268,8 +265,10 @@ export function useSynctvVoiceChat({
     try {
       console.log('[SynctvVoice] Connecting...');
 
-      // 获取本地音频流
-      await getLocalStream();
+      // 只有麦克风开启时才获取本地音频流
+      if (isMicEnabled) {
+        await getLocalStream();
+      }
 
       // 创建 synctv WebSocket 客户端
       const client = new SynctvWebSocketClient();
@@ -295,7 +294,7 @@ export function useSynctvVoiceChat({
     } finally {
       setIsConnecting(false);
     }
-  }, [synctvConfig, getLocalStream, setupWebRTCEventHandlers]);
+  }, [synctvConfig, isMicEnabled, getLocalStream, setupWebRTCEventHandlers]);
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -323,17 +322,20 @@ export function useSynctvVoiceChat({
   }, [stopLocalStream]);
 
   // 自动连接/断开
+  // 只要喇叭或麦克风任一开启，就建立连接
   useEffect(() => {
-    if (isMicEnabled && synctvConfig && synctvConfig.roomId) {
+    const shouldConnect = (isMicEnabled || isSpeakerEnabled) && synctvConfig && synctvConfig.roomId;
+
+    if (shouldConnect) {
       connect();
-    } else if (!isMicEnabled) {
+    } else if (!isMicEnabled && !isSpeakerEnabled) {
       disconnect();
     }
 
     return () => {
       disconnect();
     };
-  }, [isMicEnabled, synctvConfig, connect, disconnect]);
+  }, [isMicEnabled, isSpeakerEnabled, synctvConfig, connect, disconnect]);
 
   // 静音/取消静音
   useEffect(() => {
@@ -343,6 +345,47 @@ export function useSynctvVoiceChat({
       });
     }
   }, [isMicEnabled]);
+
+  // 处理麦克风动态开启：在连接状态下开启麦克风时，获取本地流并添加到所有连接
+  useEffect(() => {
+    // 只有在已连接、麦克风开启、且没有本地流时才执行
+    if (!isConnected || !isMicEnabled || localStreamRef.current) {
+      return;
+    }
+
+    const addTracksToConnections = async () => {
+      try {
+        console.log('[SynctvVoice] Microphone enabled during connection, getting local stream...');
+        const stream = await getLocalStream();
+
+        // 为所有现有的连接添加音轨
+        peerConnectionsRef.current.forEach((pc, peerId) => {
+          stream.getTracks().forEach(track => {
+            pc.addTrack(track, stream);
+          });
+          console.log('[SynctvVoice] Added tracks to existing connection:', peerId);
+        });
+
+        // 如果有其他成员，重新发起连接（发送新的 offer）
+        // 这样对方才能接收到我们的新音轨
+        const client = synctvClientRef.current;
+        if (client) {
+          peerConnectionsRef.current.forEach((pc, peerId) => {
+            pc.createOffer().then(offer => {
+              pc.setLocalDescription(offer);
+              const [userId, connId] = peerId.split(':');
+              client.sendOffer(userId, connId, offer);
+              console.log('[SynctvVoice] Re-sent offer with new tracks to:', peerId);
+            });
+          });
+        }
+      } catch (err) {
+        console.error('[SynctvVoice] Failed to add tracks to connections:', err);
+      }
+    };
+
+    addTracksToConnections();
+  }, [isMicEnabled, isConnected, getLocalStream]);
 
   return {
     isConnecting,
