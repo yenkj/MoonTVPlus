@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { normalizeApiBaseUrl } from '@/lib/url';
+
 function generatePlaySessionId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID().replace(/-/g, '')
     : Math.random().toString(36).slice(2, 18) + Date.now().toString(36);
 }
+
 interface EmbyConfig {
   ServerURL: string;
   ApiKey?: string;
@@ -100,7 +103,7 @@ export class EmbyClient {
   private embyAuthorizationHeader: string;
 
   constructor(config: EmbyConfig) {
-    let serverUrl = config.ServerURL.replace(/\/$/, '');
+    let serverUrl = normalizeApiBaseUrl(config.ServerURL);
 
     // 存储高级选项
     this.removeEmbyPrefix = config.removeEmbyPrefix || false;
