@@ -14,8 +14,11 @@ import {
   DanmakuFilterConfig,
   Favorite,
   IStorage,
+  LocalSettingsSyncRecord,
   PlayRecord,
   PlayStatsResult,
+  SetLocalSettingsSyncOptions,
+  SetLocalSettingsSyncResult,
   SkipConfig,
   UserPlayStat,
 } from './types';
@@ -1041,6 +1044,28 @@ export class DbManager {
     if (typeof (this.storage as any).setAdminConfig === 'function') {
       await (this.storage as any).setAdminConfig(config);
     }
+  }
+
+  // ---------- 本地设置云同步 ----------
+  async getUserLocalSettings(
+    userName: string
+  ): Promise<LocalSettingsSyncRecord | null> {
+    if (typeof (this.storage as any).getUserLocalSettings === 'function') {
+      return (this.storage as any).getUserLocalSettings(userName);
+    }
+    return null;
+  }
+
+  async setUserLocalSettings(
+    userName: string,
+    payload: string,
+    opts: SetLocalSettingsSyncOptions
+  ): Promise<SetLocalSettingsSyncResult> {
+    if (typeof (this.storage as any).setUserLocalSettings === 'function') {
+      return (this.storage as any).setUserLocalSettings(userName, payload, opts);
+    }
+    // 存储后端不支持时静默忽略（等价于从未开启）
+    return { ok: true, version: 0, updatedAt: Date.now() };
   }
 
   // ---------- 跳过片头片尾配置 ----------
