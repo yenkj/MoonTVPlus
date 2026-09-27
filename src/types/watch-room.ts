@@ -31,6 +31,7 @@ export interface PlayState {
   url: string;
   currentTime: number;
   isPlaying: boolean;
+  playbackRate?: number; // 播放倍速，观影室同步类型下由房主同步
   videoId: string;
   videoName: string;
   videoYear?: string;
@@ -107,6 +108,7 @@ export interface ServerToClientEvents {
   'play:play': () => void;
   'play:pause': () => void;
   'play:change': (state: PlayState) => void;
+  'play:owner-left': () => void;
   'live:change': (state: LiveState) => void;
   'screen:start': (state: ScreenState) => void;
   'screen:stop': () => void;
@@ -157,6 +159,7 @@ export interface ClientToServerEvents {
   'play:play': () => void;
   'play:pause': () => void;
   'play:change': (state: PlayState) => void;
+  'play:owner-leave': () => void;
 
   'live:change': (state: LiveState) => void;
   'screen:helper-register': (data: {
@@ -194,6 +197,7 @@ export interface WatchRoomConfig {
   serverType: 'internal' | 'external' | 'synctv';
   externalServerUrl?: string;
   externalServerAuth?: string; // 通过 /api/watch-room-auth 接口获取（需要登录）
+  externalAppId?: string; // 外部服务器多应用隔离 ID，通过 /api/watch-room-auth 接口获取（需要登录）
   roomId?: string; // synctv 模式需要 roomId
 }
 
