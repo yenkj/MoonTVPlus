@@ -7689,7 +7689,7 @@ function PlayPageClient() {
         // 判断选中的字幕是否可以使用原生渲染（非自定义渲染器字幕）
         const shouldUseNativeInitialSubtitle = !!selectedSubtitle && !isCustomRendererSourceSubtitle(selectedSubtitle);
         const savedSubtitleSize = typeof window !== 'undefined' ? localStorage.getItem('subtitleSize') || '2em' : '2em';
-        currentSubtitleLabelRef.current = preferredSubtitle?.label || '关闭';
+        currentSubtitleLabelRef.current = selectedSubtitle?.label || '关闭';
 
         artPlayerRef.current = new Artplayer({
           container: artRef.current!,
