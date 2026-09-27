@@ -835,7 +835,7 @@ class WatchRoomServer {
     });
   }
 
-async handleLeaveRoom(socket, isExplicitLeave = false) {
+  async handleLeaveRoom(socket, isExplicitLeave = false) {
     const roomInfo = this.socketToRoom.get(socket.id);
     if (!roomInfo) return;
 

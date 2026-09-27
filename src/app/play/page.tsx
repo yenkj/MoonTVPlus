@@ -8992,12 +8992,11 @@ function PlayPageClient() {
           applyProgressThumbConfig();
 
           // 添加字幕切换和本地字幕上传功能；ASS/SSA/PGS 需要播放器 ready 后挂载专用渲染器
-          // 使用 getPreferredSubtitle 优先选择中文字幕（无匹配时回退到第 0 项）
+          // 使用 getPreferredSubtitle 优先选择中文字幕
           const readySubtitles = (detailRef.current?.subtitles?.[currentEpisodeIndexRef.current] || []) as SourceSubtitleItem[];
-          const readyPreferredSubtitle = (getPreferredSubtitle(readySubtitles) || readySubtitles[0]) as SourceSubtitleItem;
+          const readyPreferredSubtitle = getPreferredSubtitle(readySubtitles) as SourceSubtitleItem;
           if (readyPreferredSubtitle && isCustomRendererSourceSubtitle(readyPreferredSubtitle)) {
             void switchSourceSubtitle(readyPreferredSubtitle)
-          }
               .catch((error) => {
                 console.warn('[Subtitle] 高级字幕自动加载失败:', error);
                 if (artPlayerRef.current) {
