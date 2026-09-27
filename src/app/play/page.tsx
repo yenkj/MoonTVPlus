@@ -7714,7 +7714,7 @@ function PlayPageClient() {
           fullscreenWeb: true,  // 保留网页全屏按钮（所有平台）
           ...(shouldUseNativeInitialSubtitle ? {
             subtitle: {
-              url: preferredSubtitle!.url,
+              url: selectedSubtitle!.url,
               type: 'vtt',
               style: {
                 color: '#fff',
